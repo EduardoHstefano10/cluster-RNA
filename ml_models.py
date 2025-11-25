@@ -12,6 +12,45 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split
 import joblib
 import os
+import sys
+
+
+def _safe_joblib_load(path: str):
+    """
+    Carga segura de modelos joblib entrenados con versiones distintas de
+    NumPy / scikit-learn. Maneja el error MT19937 'not a known BitGenerator'.
+    """
+    try:
+        return joblib.load(path)
+    except ValueError as exc:
+        msg = str(exc)
+        # Manejo específico para: "<class 'numpy.random._mt19937.MT19937'> is not a known BitGenerator module."
+        if "MT19937" in msg and "BitGenerator" in msg:
+            # Estrategia alternativa: parchear temporalmente numpy.random._pickle
+            import numpy.random._pickle as np_pickle
+            from numpy.random import MT19937
+            
+            # Guardar la función original
+            original_ctor = np_pickle.__bit_generator_ctor
+            
+            # Crear función wrapper que maneja MT19937
+            def patched_bit_generator_ctor(bit_gen_name):
+                if 'MT19937' in str(bit_gen_name):
+                    return MT19937
+                return original_ctor(bit_gen_name)
+            
+            # Aplicar el parche temporalmente
+            np_pickle.__bit_generator_ctor = patched_bit_generator_ctor
+            
+            try:
+                # Reintentar la carga con el parche aplicado
+                result = joblib.load(path)
+                return result
+            finally:
+                # Restaurar la función original
+                np_pickle.__bit_generator_ctor = original_ctor
+        # Si es otro tipo de ValueError, re‑lanzar
+        raise
 
 
 class StudentRiskPredictor:
@@ -219,10 +258,10 @@ class StudentRiskPredictor:
         """
         Cargar modelo guardado
         """
-        self.scaler = joblib.load(f'{path}/scaler.pkl')
-        self.pca = joblib.load(f'{path}/pca.pkl')
-        self.kmeans = joblib.load(f'{path}/kmeans.pkl')
-        self.neural_network = joblib.load(f'{path}/neural_network.pkl')
+        self.scaler = _safe_joblib_load(f'{path}/scaler.pkl')
+        self.pca = _safe_joblib_load(f'{path}/pca.pkl')
+        self.kmeans = _safe_joblib_load(f'{path}/kmeans.pkl')
+        self.neural_network = _safe_joblib_load(f'{path}/neural_network.pkl')
         self.is_trained = True
 
         print(f"Modelo cargado desde {path}/")

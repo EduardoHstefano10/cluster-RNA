@@ -15,7 +15,7 @@ from sklearn.metrics import classification_report, accuracy_score
 import joblib
 import os
 from datetime import datetime
-from database import EstudiantesDB
+# from database import EstudiantesDB  # <-- Comentar esta línea si no usas PostgreSQL
 
 
 class CategoricalRiskPredictor:
