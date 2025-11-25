@@ -349,9 +349,10 @@
             <h2 class="section-title">Identificación del estudiante</h2>
             <p class="info-text">Busque o seleccione al estudiante antes de completar las variables del modelo.</p>
 
-            <div class="mb-4">
+            <div class="mb-4" style="position: relative;">
                 <label class="form-label">Buscar estudiante por nombre o código</label>
-                <input type="text" class="form-control" id="searchStudent" placeholder='Ej.: "20231547" o "Ana Castillo"'>
+                <input type="text" class="form-control" id="searchStudent" placeholder='Ej.: "20231547" o "Ana Castillo"' autocomplete="off">
+                <div id="searchResults" style="position: absolute; z-index: 1000; width: 100%; max-height: 300px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; margin-top: 4px; display: none;"></div>
             </div>
 
             <div class="row mb-3">
@@ -396,7 +397,7 @@
             </div>
 
             <div class="d-flex justify-content-end">
-                <button class="btn btn-load">Cargar datos del estudiante</button>
+                <button class="btn btn-load" id="loadStudentBtn" onclick="loadStudentData()">Cargar datos del estudiante</button>
             </div>
 
             <p class="info-text mt-3">Estado del estudiante: Nuevo registro · Puede cambiar a Asignado o En seguimiento según historial.</p>
@@ -628,6 +629,9 @@
             ? 'http://localhost:8000'  // Flask backend
             : '';  // Mismo origen en producción
 
+        // Variable global para el estudiante seleccionado
+        let selectedStudent = null;
+
         // Manejar selección de botones de opción
         document.querySelectorAll('.btn-option').forEach(button => {
             button.addEventListener('click', function() {
@@ -647,6 +651,212 @@
         tutorNotes.addEventListener('input', function() {
             const count = this.value.length;
             charCounter.textContent = `${count} / 500 caracteres`;
+        });
+
+        // Búsqueda de estudiantes en tiempo real
+        const searchInput = document.getElementById('searchStudent');
+        const searchResults = document.getElementById('searchResults');
+        let searchTimeout;
+
+        searchInput.addEventListener('input', async function() {
+            const query = this.value.trim();
+
+            // Limpiar timeout anterior
+            clearTimeout(searchTimeout);
+
+            if (query.length < 2) {
+                searchResults.style.display = 'none';
+                return;
+            }
+
+            // Debounce: esperar 300ms antes de buscar
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}&limit=10`);
+
+                    if (!response.ok) {
+                        throw new Error('Error al buscar estudiantes');
+                    }
+
+                    const data = await response.json();
+                    displaySearchResults(data.results);
+                } catch (error) {
+                    console.error('Error en búsqueda:', error);
+                    searchResults.innerHTML = '<div style="padding: 12px; color: var(--text-secondary);">Error al buscar estudiantes</div>';
+                    searchResults.style.display = 'block';
+                }
+            }, 300);
+        });
+
+        // Mostrar resultados de búsqueda
+        function displaySearchResults(results) {
+            if (results.length === 0) {
+                searchResults.innerHTML = '<div style="padding: 12px; color: var(--text-secondary);">No se encontraron estudiantes</div>';
+                searchResults.style.display = 'block';
+                return;
+            }
+
+            const html = results.map(student => `
+                <div class="search-result-item" onclick="selectStudent('${student.codigo}')" style="
+                    padding: 12px;
+                    cursor: pointer;
+                    border-bottom: 1px solid var(--border-color);
+                    transition: background 0.2s;
+                " onmouseover="this.style.background='var(--bg-input)'" onmouseout="this.style.background='transparent'">
+                    <div style="font-weight: 600;">${student.nombre}</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                        Código: ${student.codigo} | ${student.carrera || 'Sin carrera'} | Ciclo ${student.ciclo || 'N/A'}
+                    </div>
+                </div>
+            `).join('');
+
+            searchResults.innerHTML = html;
+            searchResults.style.display = 'block';
+        }
+
+        // Seleccionar estudiante desde la búsqueda
+        async function selectStudent(codigo) {
+            try {
+                // Rellenar campos básicos
+                document.getElementById('studentCode').value = codigo;
+                searchInput.value = '';
+                searchResults.style.display = 'none';
+
+                // Cargar datos completos del estudiante
+                await loadStudentDataByCode(codigo);
+            } catch (error) {
+                console.error('Error al seleccionar estudiante:', error);
+            }
+        }
+
+        // Cargar datos del estudiante por código
+        async function loadStudentDataByCode(codigo) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/students/${codigo}`);
+
+                if (!response.ok) {
+                    throw new Error('Estudiante no encontrado');
+                }
+
+                const data = await response.json();
+                selectedStudent = data.student;
+
+                // Rellenar campos básicos
+                document.getElementById('studentCode').value = selectedStudent.codigo;
+                document.getElementById('studentName').value = selectedStudent.nombre;
+                document.getElementById('edad').value = selectedStudent.edad || 20;
+
+                // Mapear carrera
+                const carreraSelect = document.getElementById('carrera');
+                const carreraMap = {
+                    'Ingeniería': 'ing',
+                    'Ingeniería de Sistemas': 'ing',
+                    'Administración': 'adm',
+                    'Derecho': 'der',
+                    'Medicina': 'med'
+                };
+                const carreraValue = carreraMap[selectedStudent.carrera];
+                if (carreraValue) {
+                    carreraSelect.value = carreraValue;
+                }
+
+                document.getElementById('ciclo').value = selectedStudent.ciclo || '';
+
+                // Rellenar variables categóricas si existen
+                if (selectedStudent.sueno_horas) {
+                    setButtonValue('sueno_horas', selectedStudent.sueno_horas);
+                }
+                if (selectedStudent.actividad_fisica) {
+                    setButtonValue('actividad_fisica', selectedStudent.actividad_fisica);
+                }
+                if (selectedStudent.alimentacion) {
+                    setButtonValue('alimentacion', selectedStudent.alimentacion);
+                }
+                if (selectedStudent.estilo_de_vida) {
+                    setButtonValue('estilo_de_vida', selectedStudent.estilo_de_vida);
+                }
+                if (selectedStudent.estres_academico) {
+                    setButtonValue('estres_academico', selectedStudent.estres_academico);
+                }
+                if (selectedStudent.apoyo_familiar) {
+                    setButtonValue('apoyo_familiar', selectedStudent.apoyo_familiar);
+                }
+                if (selectedStudent.bienestar) {
+                    setButtonValue('bienestar', selectedStudent.bienestar);
+                }
+                if (selectedStudent.asistencia) {
+                    setButtonValue('asistencia', selectedStudent.asistencia);
+                }
+                if (selectedStudent.horas_estudio) {
+                    setButtonValue('horas_estudio', selectedStudent.horas_estudio);
+                }
+                if (selectedStudent.interes_academico) {
+                    setButtonValue('interes_academico', selectedStudent.interes_academico);
+                }
+                if (selectedStudent.rendimiento_academico) {
+                    setButtonValue('rendimiento_academico', selectedStudent.rendimiento_academico);
+                }
+                if (selectedStudent.historial_academico) {
+                    setButtonValue('historial_academico', selectedStudent.historial_academico);
+                }
+                if (selectedStudent.carga_laboral) {
+                    setButtonValue('carga_laboral', selectedStudent.carga_laboral);
+                }
+                if (selectedStudent.beca) {
+                    setButtonValue('beca', selectedStudent.beca);
+                }
+                if (selectedStudent.deudor) {
+                    setButtonValue('deudor', selectedStudent.deudor);
+                }
+
+                // Rellenar notas del tutor si existen
+                if (selectedStudent.notas_tutor) {
+                    document.getElementById('tutorNotes').value = selectedStudent.notas_tutor;
+                    const count = selectedStudent.notas_tutor.length;
+                    charCounter.textContent = `${count} / 500 caracteres`;
+                }
+
+                alert(`✅ Datos cargados exitosamente para ${selectedStudent.nombre}`);
+            } catch (error) {
+                console.error('Error al cargar datos:', error);
+                alert('❌ Error al cargar datos del estudiante: ' + error.message);
+            }
+        }
+
+        // Función auxiliar para establecer el valor de un grupo de botones
+        function setButtonValue(variableName, value) {
+            const group = document.querySelector(`[data-variable="${variableName}"]`);
+            if (!group) return;
+
+            // Remover active de todos los botones
+            group.querySelectorAll('.btn-option').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Activar el botón correspondiente
+            const targetButton = group.querySelector(`[data-value="${value}"]`);
+            if (targetButton) {
+                targetButton.classList.add('active');
+            }
+        }
+
+        // Función para cargar datos del estudiante (botón "Cargar datos")
+        async function loadStudentData() {
+            const codigo = document.getElementById('studentCode').value.trim();
+
+            if (!codigo) {
+                alert('Por favor ingrese un código de estudiante');
+                return;
+            }
+
+            await loadStudentDataByCode(codigo);
+        }
+
+        // Cerrar resultados al hacer clic fuera
+        document.addEventListener('click', function(event) {
+            if (!searchInput.contains(event.target) && !searchResults.contains(event.target)) {
+                searchResults.style.display = 'none';
+            }
         });
 
         // Función para recopilar valores categóricos seleccionados
