@@ -332,6 +332,29 @@ async def register_student(profile: StudentProfile):
         db.close()
 
 
+@app.get("/api/students/search")
+async def search_students(q: str, limit: int = 10):
+    """Buscar estudiantes por nombre o código"""
+    db = EstudiantesDB()
+
+    try:
+        query = """
+        SELECT codigo, nombre, carrera, ciclo, edad
+        FROM estudiantes
+        WHERE LOWER(nombre) LIKE LOWER(%s) OR codigo LIKE %s
+        LIMIT %s
+        """
+        search_term = f"%{q}%"
+        results = db.db.fetch_all(query, (search_term, search_term, limit))
+
+        return {
+            'results': results,
+            'total': len(results)
+        }
+    finally:
+        db.close()
+
+
 @app.get("/api/students/{codigo}")
 async def get_student_profile(codigo: str):
     """Obtener perfil completo de un estudiante"""
