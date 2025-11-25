@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrar / Actualizar Datos del Estudiante — Sistema de Alerta Temprana</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --bg-dark: #0f1419;
+            --bg-card: #1a1f2e;
+            --bg-input: #2a2f3e;
+            --text-primary: #ffffff;
+            --text-secondary: #8b92a0;
+            --accent-yellow: #fbbf24;
+            --accent-green: #10b981;
+            --border-color: #374151;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .breadcrumb {
+            background: none;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+
+        .breadcrumb-item {
+            color: var(--text-secondary);
+        }
+
+        .breadcrumb-item.active {
+            color: var(--text-primary);
+        }
+
+        .header-section h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header-section p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .stat-icon i {
+            color: #3b82f6;
+            font-size: 20px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-subtext {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-green);
+            border-radius: 50%;
+        }
+
+        .main-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-control, .form-select {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 10px 14px;
+        }
+
+        .form-control:focus, .form-select:focus {
+            background-color: var(--bg-input);
+            border-color: #3b82f6;
+            color: var(--text-primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .form-control::placeholder {
+            color: #6b7280;
+        }
+
+        .btn-option {
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .btn-option:hover {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .btn-option.active {
+            background: var(--accent-yellow);
+            border-color: var(--accent-yellow);
+            color: #000;
+            font-weight: 600;
+        }
+
+        .category-section {
+            margin-bottom: 30px;
+        }
+
+        .category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .category-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .category-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .btn-primary-custom {
+            background: var(--accent-yellow);
+            border: none;
+            color: #000;
+            font-weight: 600;
+            padding: 12px 32px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary-custom:hover {
+            background: #f59e0b;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+        }
+
+        .btn-secondary-custom {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 12px 32px;
+            border-radius: 8px;
+        }
+
+        .btn-secondary-custom:hover {
+            background: var(--bg-input);
+        }
+
+        .btn-load {
+            background: var(--accent-yellow);
+            border: none;
+            color: #000;
+            font-weight: 600;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+        }
+
+        .variable-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .notes-area {
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+
+        .notes-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .notes-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        textarea.form-control {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .char-counter {
+            text-align: right;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .info-text {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid" style="max-width: 1400px;">
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">Inicio</li>
+                <li class="breadcrumb-item">Estudiantes</li>
+                <li class="breadcrumb-item active">Registrar / Actualizar datos</li>
+            </ol>
+        </nav>
+
+        <!-- Header -->
+        <div class="header-section">
+            <h1>Registrar / Actualizar Datos del Estudiante — Sistema de Alerta Temprana</h1>
+            <p>Gestión de datos del estudiante para predicción temprana de riesgo académico y clúster de comportamiento.</p>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="stat-label">Estudiantes registrados</div>
+                <div class="stat-value">1,245</div>
+                <div class="stat-subtext">Total estudiantes registrados</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="bi bi-clock-fill"></i>
+                </div>
+                <div class="stat-label">Última actualización</div>
+                <div class="stat-value">12/09/2025 · 14:32</div>
+                <div class="stat-subtext">Registro modificado recientemente</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+                <div class="stat-label">Porcentaje de datos completos</div>
+                <div class="stat-value">87%</div>
+                <div class="stat-subtext">Variables del perfil actualizadas</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="bi bi-check-circle-fill"></i>
+                </div>
+                <div class="stat-label">Estado del modelo</div>
+                <div class="stat-value">Operativo</div>
+                <div class="status-badge">
+                    <span class="status-dot"></span>
+                    Predicción disponible
+                </div>
+            </div>
+        </div>
+
+        <!-- Identificación del estudiante -->
+        <div class="main-card">
+            <h2 class="section-title">Identificación del estudiante</h2>
+            <p class="info-text">Busque o seleccione al estudiante antes de completar las variables del modelo.</p>
+
+            <div class="mb-4">
+                <label class="form-label">Buscar estudiante por nombre o código</label>
+                <input type="text" class="form-control" id="searchStudent" placeholder='Ej.: "20231547" o "Ana Castillo"'>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">Código del estudiante</label>
+                    <input type="text" class="form-control" id="studentCode" placeholder="Ingresar código">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Nombres y apellidos</label>
+                    <input type="text" class="form-control" id="studentName" placeholder="Ingresar nombres completos">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Carrera</label>
+                    <select class="form-select" id="carrera">
+                        <option selected>Seleccionar carrera</option>
+                        <option value="ing">Ingeniería</option>
+                        <option value="adm">Administración</option>
+                        <option value="der">Derecho</option>
+                        <option value="med">Medicina</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Ciclo</label>
+                    <select class="form-select" id="ciclo">
+                        <option selected>Seleccionar ciclo</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end">
+                <button class="btn btn-load">Cargar datos del estudiante</button>
+            </div>
+
+            <p class="info-text mt-3">Estado del estudiante: Nuevo registro · Puede cambiar a Asignado o En seguimiento según historial.</p>
+        </div>
+
+        <!-- Variables del estudiante -->
+        <div class="main-card">
+            <h2 class="section-title">Variables del estudiante</h2>
+            <p class="info-text mb-4">Complete las variables categóricas para alimentar el modelo bayesiano de alerta temprana.</p>
+
+            <!-- Hábitos y bienestar -->
+            <div class="category-section">
+                <div class="category-header">
+                    <h3 class="category-title">Hábitos y bienestar</h3>
+                    <span class="category-subtitle">Rutinas diarias y estado general</span>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-moon-fill"></i> Horas de sueño</label>
+                        <div class="category-subtitle mb-2">Promedio diario estimado</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Menos de 6h</button>
+                            <button type="button" class="btn btn-option active">Entre 6-8h</button>
+                            <button type="button" class="btn btn-option">Más de 8h</button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-heart-pulse-fill"></i> Actividad física</label>
+                        <div class="category-subtitle mb-2">Nivel semanal</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Sedentario</button>
+                            <button type="button" class="btn btn-option active">Moderado</button>
+                            <button type="button" class="btn btn-option">Activo</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-cup-hot-fill"></i> Alimentación</label>
+                        <div class="category-subtitle mb-2">Calidad y regularidad</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Poco saludable</button>
+                            <button type="button" class="btn btn-option">Moderada</button>
+                            <button type="button" class="btn btn-option active">Balanceada</button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-emoji-smile-fill"></i> Bienestar</label>
+                        <div class="category-subtitle mb-2">Percepción general</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">En riesgo</button>
+                            <button type="button" class="btn btn-option">Moderado</button>
+                            <button type="button" class="btn btn-option active">Saludable</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12">
+                        <label class="form-label"><i class="bi bi-graph-up-arrow"></i> Estrés académico</label>
+                        <div class="category-subtitle mb-2">Últimas semanas</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Leve</button>
+                            <button type="button" class="btn btn-option active">Moderado</button>
+                            <button type="button" class="btn btn-option">Severo</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contexto personal y financiero -->
+            <div class="category-section">
+                <div class="category-header">
+                    <h3 class="category-title">Contexto personal y financiero</h3>
+                    <span class="category-subtitle">Soporte y situación económica</span>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-people-fill"></i> Apoyo familiar</label>
+                        <div class="category-subtitle mb-2">Acompañamiento percibido</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Escaso</button>
+                            <button type="button" class="btn btn-option">Moderado</button>
+                            <button type="button" class="btn btn-option active">Fuerte</button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-briefcase-fill"></i> Carga laboral</label>
+                        <div class="category-subtitle mb-2">Horas de trabajo</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">No trabaja</button>
+                            <button type="button" class="btn btn-option active">Parcial</button>
+                            <button type="button" class="btn btn-option">Completa</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-award-fill"></i> Beca</label>
+                        <div class="category-subtitle mb-2">Tipo de apoyo económico</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">No tiene</button>
+                            <button type="button" class="btn btn-option">Parcial</button>
+                            <button type="button" class="btn btn-option active">Completa</button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-cash-stack"></i> Deudor</label>
+                        <div class="category-subtitle mb-2">Estado de pago</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option active">Sin deuda</button>
+                            <button type="button" class="btn btn-option">Retraso leve</button>
+                            <button type="button" class="btn btn-option">Retraso moderado</button>
+                            <button type="button" class="btn btn-option">Retraso crítico</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rendimiento y compromiso -->
+            <div class="category-section">
+                <div class="category-header">
+                    <h3 class="category-title">Rendimiento y compromiso</h3>
+                    <span class="category-subtitle">Desempeño y participación académica</span>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-calendar-check-fill"></i> Asistencia</label>
+                        <div class="category-subtitle mb-2">Asistencia a clases</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Irregular</button>
+                            <button type="button" class="btn btn-option active">Frecuente</button>
+                            <button type="button" class="btn btn-option">Constante</button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-clock-fill"></i> Horas de estudio</label>
+                        <div class="category-subtitle mb-2">Fuera del aula</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Menor a 1h</button>
+                            <button type="button" class="btn btn-option active">1-3h</button>
+                            <button type="button" class="btn btn-option">Más de 3h</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-mortarboard-fill"></i> Rendimiento académico</label>
+                        <div class="category-subtitle mb-2">Situación actual</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">En inicio</button>
+                            <button type="button" class="btn btn-option">En proceso</button>
+                            <button type="button" class="btn btn-option">Previsto</button>
+                            <button type="button" class="btn btn-option active">Logro destacado</button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-star-fill"></i> Interés académico</label>
+                        <div class="category-subtitle mb-2">Motivación percibida</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Desmotivado</button>
+                            <button type="button" class="btn btn-option">Regular</button>
+                            <button type="button" class="btn btn-option active">Muy motivado</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12">
+                        <label class="form-label"><i class="bi bi-bookmark-fill"></i> Historial académico</label>
+                        <div class="category-subtitle mb-2">Créditos aprobados</div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-option">Menor a 11 créditos</button>
+                            <button type="button" class="btn btn-option active">Entre 11-15</button>
+                            <button type="button" class="btn btn-option">Mayor a 15</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notas del tutor -->
+            <div class="notes-area">
+                <div class="notes-title">Notas del tutor</div>
+                <div class="notes-subtitle">Observaciones cualitativas sobre el estudiante</div>
+                <textarea class="form-control" id="tutorNotes" placeholder="Ej.: Cambios recientes en la participación en clase, señales de desmotivación o fortalezas relevantes que el modelo no captura de forma estructurada."></textarea>
+                <div class="char-counter">0 / 500 caracteres</div>
+            </div>
+
+            <p class="info-text mt-4">Revise que todas las variables categóricas estén asignadas antes de generar la predicción.</p>
+
+            <!-- Botones de acción -->
+            <div class="d-flex justify-content-end gap-3 mt-4">
+                <button class="btn btn-secondary-custom">Cancelar</button>
+                <button class="btn btn-primary-custom" onclick="generarPrediccion()">Generar Predicción y Clúster</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Manejar selección de botones de opción
+        document.querySelectorAll('.btn-option').forEach(button => {
+            button.addEventListener('click', function() {
+                // Remover active de hermanos
+                this.parentElement.querySelectorAll('.btn-option').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                // Agregar active al clickeado
+                this.classList.add('active');
+            });
+        });
+
+        // Contador de caracteres
+        const tutorNotes = document.getElementById('tutorNotes');
+        const charCounter = document.querySelector('.char-counter');
+
+        tutorNotes.addEventListener('input', function() {
+            const count = this.value.length;
+            charCounter.textContent = `${count} / 500 caracteres`;
+        });
+
+        // Función para generar predicción
+        async function generarPrediccion() {
+            // Recopilar datos del formulario
+            const studentData = {
+                Promedio_ponderado: 15.5,  // Estos valores deberían venir del formulario
+                Creditos_matriculados: 20,
+                Porcentaje_creditos_aprobados: 75,
+                Cursos_desaprobados: 1,
+                Asistencia: 87,
+                Retiros_cursos: 1,
+                Edad: 21,
+                Horas_trabajo_semana: 15,
+                Anio_ingreso: 2015,
+                Numero_ciclos_academicos: 10,
+                Cursos_matriculados_ciclo: 6,
+                Horas_estudio_semana: 17,
+                indice_regularidad: 65,
+                Intentos_aprobacion_curso: 1,
+                Nota_promedio: 16
+            };
+
+            try {
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(studentData)
+                });
+
+                const result = await response.json();
+                console.log('Predicción generada:', result);
+
+                // Redirigir al panel del tutor
+                alert(`Predicción generada:\nRiesgo: ${result.risk_label}\nClúster: ${result.cluster_name}`);
+                window.location.href = '/panel';
+            } catch (error) {
+                console.error('Error al generar predicción:', error);
+                alert('Error al generar la predicción');
+            }
+        }
+    </script>
+</body>
+</html>
