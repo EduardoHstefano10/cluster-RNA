@@ -355,13 +355,17 @@
             </div>
 
             <div class="row mb-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Código del estudiante</label>
-                    <input type="text" class="form-control" id="studentCode" placeholder="Ingresar código">
+                    <input type="text" class="form-control" id="studentCode" placeholder="Ej: 20231547">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Nombres y apellidos</label>
                     <input type="text" class="form-control" id="studentName" placeholder="Ingresar nombres completos">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Edad</label>
+                    <input type="number" class="form-control" id="edad" placeholder="Edad" min="16" max="60" value="20">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Carrera</label>
@@ -414,20 +418,20 @@
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-moon-fill"></i> Horas de sueño</label>
                         <div class="category-subtitle mb-2">Promedio diario estimado</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Menos de 6h</button>
-                            <button type="button" class="btn btn-option active">Entre 6-8h</button>
-                            <button type="button" class="btn btn-option">Más de 8h</button>
+                        <div class="btn-group" role="group" data-variable="sueno_horas">
+                            <button type="button" class="btn btn-option" data-value="Menos_de_6h">Menos de 6h</button>
+                            <button type="button" class="btn btn-option active" data-value="Entre_6_8h">Entre 6-8h</button>
+                            <button type="button" class="btn btn-option" data-value="Más_de_8h">Más de 8h</button>
                         </div>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-heart-pulse-fill"></i> Actividad física</label>
                         <div class="category-subtitle mb-2">Nivel semanal</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Sedentario</button>
-                            <button type="button" class="btn btn-option active">Moderado</button>
-                            <button type="button" class="btn btn-option">Activo</button>
+                        <div class="btn-group" role="group" data-variable="actividad_fisica">
+                            <button type="button" class="btn btn-option" data-value="Sedentario">Sedentario</button>
+                            <button type="button" class="btn btn-option active" data-value="Moderado">Moderado</button>
+                            <button type="button" class="btn btn-option" data-value="Activa">Activa</button>
                         </div>
                     </div>
                 </div>
@@ -436,32 +440,44 @@
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-cup-hot-fill"></i> Alimentación</label>
                         <div class="category-subtitle mb-2">Calidad y regularidad</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Poco saludable</button>
-                            <button type="button" class="btn btn-option">Moderada</button>
-                            <button type="button" class="btn btn-option active">Balanceada</button>
+                        <div class="btn-group" role="group" data-variable="alimentacion">
+                            <button type="button" class="btn btn-option" data-value="Poco_saludable">Poco saludable</button>
+                            <button type="button" class="btn btn-option active" data-value="Moderada">Moderada</button>
+                            <button type="button" class="btn btn-option" data-value="Balanceada">Balanceada</button>
                         </div>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label"><i class="bi bi-emoji-smile-fill"></i> Bienestar</label>
-                        <div class="category-subtitle mb-2">Percepción general</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">En riesgo</button>
-                            <button type="button" class="btn btn-option">Moderado</button>
-                            <button type="button" class="btn btn-option active">Saludable</button>
+                        <label class="form-label"><i class="bi bi-activity"></i> Estilo de vida</label>
+                        <div class="category-subtitle mb-2">Balance general</div>
+                        <div class="btn-group" role="group" data-variable="estilo_de_vida">
+                            <button type="button" class="btn btn-option" data-value="Poco_saludable">Poco saludable</button>
+                            <button type="button" class="btn btn-option active" data-value="Moderado">Moderado</button>
+                            <button type="button" class="btn btn-option" data-value="Saludable">Saludable</button>
                         </div>
                     </div>
                 </div>
 
-                <div class="row">
-                    <div class="col-md-12">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="bi bi-emoji-smile-fill"></i> Bienestar</label>
+                        <div class="category-subtitle mb-2">Percepción general</div>
+                        <div class="btn-group" role="group" data-variable="bienestar">
+                            <button type="button" class="btn btn-option" data-value="En_riesgo">En riesgo</button>
+                            <button type="button" class="btn btn-option active" data-value="Moderado">Moderado</button>
+                            <button type="button" class="btn btn-option" data-value="Saludable">Saludable</button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-graph-up-arrow"></i> Estrés académico</label>
                         <div class="category-subtitle mb-2">Últimas semanas</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Leve</button>
-                            <button type="button" class="btn btn-option active">Moderado</button>
-                            <button type="button" class="btn btn-option">Severo</button>
+                        <div class="btn-group" role="group" data-variable="estres_academico">
+                            <button type="button" class="btn btn-option" data-value="Leve">Leve</button>
+                            <button type="button" class="btn btn-option active" data-value="Moderado">Moderado</button>
+                            <button type="button" class="btn btn-option" data-value="Alto">Alto</button>
+                            <button type="button" class="btn btn-option" data-value="Severo">Severo</button>
+                            <button type="button" class="btn btn-option" data-value="Crítico">Crítico</button>
                         </div>
                     </div>
                 </div>
@@ -478,20 +494,21 @@
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-people-fill"></i> Apoyo familiar</label>
                         <div class="category-subtitle mb-2">Acompañamiento percibido</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Escaso</button>
-                            <button type="button" class="btn btn-option">Moderado</button>
-                            <button type="button" class="btn btn-option active">Fuerte</button>
+                        <div class="btn-group" role="group" data-variable="apoyo_familiar">
+                            <button type="button" class="btn btn-option" data-value="Nulo">Nulo</button>
+                            <button type="button" class="btn btn-option" data-value="Escaso">Escaso</button>
+                            <button type="button" class="btn btn-option active" data-value="Moderado">Moderado</button>
+                            <button type="button" class="btn btn-option" data-value="Fuerte">Fuerte</button>
                         </div>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-briefcase-fill"></i> Carga laboral</label>
                         <div class="category-subtitle mb-2">Horas de trabajo</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">No trabaja</button>
-                            <button type="button" class="btn btn-option active">Parcial</button>
-                            <button type="button" class="btn btn-option">Completa</button>
+                        <div class="btn-group" role="group" data-variable="carga_laboral">
+                            <button type="button" class="btn btn-option active" data-value="No_trabaja">No trabaja</button>
+                            <button type="button" class="btn btn-option" data-value="Parcial">Parcial</button>
+                            <button type="button" class="btn btn-option" data-value="Completa">Completa</button>
                         </div>
                     </div>
                 </div>
@@ -500,21 +517,21 @@
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-award-fill"></i> Beca</label>
                         <div class="category-subtitle mb-2">Tipo de apoyo económico</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">No tiene</button>
-                            <button type="button" class="btn btn-option">Parcial</button>
-                            <button type="button" class="btn btn-option active">Completa</button>
+                        <div class="btn-group" role="group" data-variable="beca">
+                            <button type="button" class="btn btn-option active" data-value="No_tiene">No tiene</button>
+                            <button type="button" class="btn btn-option" data-value="Parcial">Parcial</button>
+                            <button type="button" class="btn btn-option" data-value="Completa">Completa</button>
                         </div>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-cash-stack"></i> Deudor</label>
                         <div class="category-subtitle mb-2">Estado de pago</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option active">Sin deuda</button>
-                            <button type="button" class="btn btn-option">Retraso leve</button>
-                            <button type="button" class="btn btn-option">Retraso moderado</button>
-                            <button type="button" class="btn btn-option">Retraso crítico</button>
+                        <div class="btn-group" role="group" data-variable="deudor">
+                            <button type="button" class="btn btn-option active" data-value="Sin_deuda">Sin deuda</button>
+                            <button type="button" class="btn btn-option" data-value="Retraso_leve">Retraso leve</button>
+                            <button type="button" class="btn btn-option" data-value="Retraso_moderado">Retraso moderado</button>
+                            <button type="button" class="btn btn-option" data-value="Retraso_crítico">Retraso crítico</button>
                         </div>
                     </div>
                 </div>
@@ -531,20 +548,21 @@
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-calendar-check-fill"></i> Asistencia</label>
                         <div class="category-subtitle mb-2">Asistencia a clases</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Irregular</button>
-                            <button type="button" class="btn btn-option active">Frecuente</button>
-                            <button type="button" class="btn btn-option">Constante</button>
+                        <div class="btn-group" role="group" data-variable="asistencia">
+                            <button type="button" class="btn btn-option" data-value="Nula">Nula</button>
+                            <button type="button" class="btn btn-option" data-value="Irregular">Irregular</button>
+                            <button type="button" class="btn btn-option active" data-value="Frecuente">Frecuente</button>
+                            <button type="button" class="btn btn-option" data-value="Constante">Constante</button>
                         </div>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-clock-fill"></i> Horas de estudio</label>
                         <div class="category-subtitle mb-2">Fuera del aula</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Menor a 1h</button>
-                            <button type="button" class="btn btn-option active">1-3h</button>
-                            <button type="button" class="btn btn-option">Más de 3h</button>
+                        <div class="btn-group" role="group" data-variable="horas_estudio">
+                            <button type="button" class="btn btn-option" data-value="Menor_a_1h">Menor a 1h</button>
+                            <button type="button" class="btn btn-option active" data-value="De_1_3h">De 1-3h</button>
+                            <button type="button" class="btn btn-option" data-value="Más_de_3h">Más de 3h</button>
                         </div>
                     </div>
                 </div>
@@ -553,21 +571,21 @@
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-mortarboard-fill"></i> Rendimiento académico</label>
                         <div class="category-subtitle mb-2">Situación actual</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">En inicio</button>
-                            <button type="button" class="btn btn-option">En proceso</button>
-                            <button type="button" class="btn btn-option">Previsto</button>
-                            <button type="button" class="btn btn-option active">Logro destacado</button>
+                        <div class="btn-group" role="group" data-variable="rendimiento_academico">
+                            <button type="button" class="btn btn-option" data-value="En_inicio">En inicio</button>
+                            <button type="button" class="btn btn-option" data-value="En_proceso">En proceso</button>
+                            <button type="button" class="btn btn-option active" data-value="Previsto">Previsto</button>
+                            <button type="button" class="btn btn-option" data-value="Logro_destacado">Logro destacado</button>
                         </div>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label"><i class="bi bi-star-fill"></i> Interés académico</label>
                         <div class="category-subtitle mb-2">Motivación percibida</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Desmotivado</button>
-                            <button type="button" class="btn btn-option">Regular</button>
-                            <button type="button" class="btn btn-option active">Muy motivado</button>
+                        <div class="btn-group" role="group" data-variable="interes_academico">
+                            <button type="button" class="btn btn-option" data-value="Desmotivado">Desmotivado</button>
+                            <button type="button" class="btn btn-option active" data-value="Regular">Regular</button>
+                            <button type="button" class="btn btn-option" data-value="Muy_motivado">Muy motivado</button>
                         </div>
                     </div>
                 </div>
@@ -576,10 +594,10 @@
                     <div class="col-md-12">
                         <label class="form-label"><i class="bi bi-bookmark-fill"></i> Historial académico</label>
                         <div class="category-subtitle mb-2">Créditos aprobados</div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-option">Menor a 11 créditos</button>
-                            <button type="button" class="btn btn-option active">Entre 11-15</button>
-                            <button type="button" class="btn btn-option">Mayor a 15</button>
+                        <div class="btn-group" role="group" data-variable="historial_academico">
+                            <button type="button" class="btn btn-option" data-value="Menor_a_11">Menor a 11 créditos</button>
+                            <button type="button" class="btn btn-option active" data-value="Entre_11_15">Entre 11-15</button>
+                            <button type="button" class="btn btn-option" data-value="Mayor_a_15">Mayor a 15</button>
                         </div>
                     </div>
                 </div>
@@ -626,45 +644,130 @@
             charCounter.textContent = `${count} / 500 caracteres`;
         });
 
+        // Función para recopilar valores categóricos seleccionados
+        function getFormData() {
+            const categoricalData = {};
+
+            // Iterar sobre todos los grupos de botones
+            document.querySelectorAll('[data-variable]').forEach(group => {
+                const variable = group.getAttribute('data-variable');
+                const activeButton = group.querySelector('.btn-option.active');
+
+                if (activeButton) {
+                    categoricalData[variable] = activeButton.getAttribute('data-value');
+                }
+            });
+
+            return categoricalData;
+        }
+
+        // Función para validar datos del estudiante
+        function validateStudentData() {
+            const codigo = document.getElementById('studentCode').value.trim();
+            const nombre = document.getElementById('studentName').value.trim();
+            const edad = document.getElementById('edad').value;
+            const carrera = document.getElementById('carrera').value;
+            const ciclo = document.getElementById('ciclo').value;
+
+            const errors = [];
+
+            if (!codigo) errors.push('Código del estudiante');
+            if (!nombre) errors.push('Nombre del estudiante');
+            if (!edad) errors.push('Edad');
+            if (!carrera || carrera === 'Seleccionar carrera') errors.push('Carrera');
+            if (!ciclo || ciclo === 'Seleccionar ciclo') errors.push('Ciclo');
+
+            if (errors.length > 0) {
+                alert('Por favor complete los siguientes campos:\n- ' + errors.join('\n- '));
+                return null;
+            }
+
+            return {
+                codigo,
+                nombre,
+                carrera,
+                ciclo: parseInt(ciclo),
+                edad: parseInt(edad)
+            };
+        }
+
         // Función para generar predicción
         async function generarPrediccion() {
-            // Recopilar datos del formulario
-            const studentData = {
-                Promedio_ponderado: 15.5,  // Estos valores deberían venir del formulario
-                Creditos_matriculados: 20,
-                Porcentaje_creditos_aprobados: 75,
-                Cursos_desaprobados: 1,
-                Asistencia: 87,
-                Retiros_cursos: 1,
-                Edad: 21,
-                Horas_trabajo_semana: 15,
-                Anio_ingreso: 2015,
-                Numero_ciclos_academicos: 10,
-                Cursos_matriculados_ciclo: 6,
-                Horas_estudio_semana: 17,
-                indice_regularidad: 65,
-                Intentos_aprobacion_curso: 1,
-                Nota_promedio: 16
+            // Validar datos del estudiante
+            const basicData = validateStudentData();
+            if (!basicData) return;
+
+            // Recopilar datos categóricos
+            const categoricalData = getFormData();
+
+            // Verificar que todas las variables estén seleccionadas
+            const requiredVariables = [
+                'sueno_horas', 'actividad_fisica', 'alimentacion', 'estilo_de_vida',
+                'estres_academico', 'apoyo_familiar', 'bienestar', 'asistencia',
+                'horas_estudio', 'interes_academico', 'rendimiento_academico',
+                'historial_academico', 'carga_laboral', 'beca', 'deudor'
+            ];
+
+            const missingVariables = requiredVariables.filter(v => !categoricalData[v]);
+            if (missingVariables.length > 0) {
+                alert('Por favor seleccione una opción para todas las variables categóricas.\nFaltantes: ' + missingVariables.join(', '));
+                return;
+            }
+
+            // Preparar payload para el backend
+            const payload = {
+                codigo: basicData.codigo,
+                nombre: basicData.nombre,
+                carrera: basicData.carrera,
+                ciclo: basicData.ciclo,
+                edad: basicData.edad,
+                promedio_ponderado: 14.0, // Valor por defecto, se puede agregar un campo
+                datos: categoricalData,
+                notas_tutor: document.getElementById('tutorNotes').value.trim() || null
             };
 
+            console.log('Enviando datos:', payload);
+
             try {
-                const response = await fetch('/api/predict', {
+                const response = await fetch('/api/students/register', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(studentData)
+                    body: JSON.stringify(payload)
                 });
 
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Error al registrar estudiante');
+                }
+
                 const result = await response.json();
-                console.log('Predicción generada:', result);
+                console.log('Resultado:', result);
+
+                if (result.prediction) {
+                    alert(`✅ Estudiante registrado exitosamente!\n\n` +
+                          `Nombre: ${basicData.nombre}\n` +
+                          `Código: ${basicData.codigo}\n\n` +
+                          `📊 Predicción:\n` +
+                          `Riesgo: ${result.prediction.risk_label}\n` +
+                          `Clúster: ${result.prediction.cluster_name}\n` +
+                          `Probabilidad de deserción: ${(result.prediction.desertion_probability * 100).toFixed(1)}%`);
+                } else {
+                    alert(`✅ Estudiante registrado exitosamente!\n\n` +
+                          `Nombre: ${basicData.nombre}\n` +
+                          `Código: ${basicData.codigo}\n\n` +
+                          `⚠️ Predicción no disponible (modelo en entrenamiento)`);
+                }
 
                 // Redirigir al panel del tutor
-                alert(`Predicción generada:\nRiesgo: ${result.risk_label}\nClúster: ${result.cluster_name}`);
-                window.location.href = '/panel';
+                setTimeout(() => {
+                    window.location.href = '/panel';
+                }, 2000);
+
             } catch (error) {
                 console.error('Error al generar predicción:', error);
-                alert('Error al generar la predicción');
+                alert('❌ Error al registrar estudiante:\n' + error.message);
             }
         }
     </script>
