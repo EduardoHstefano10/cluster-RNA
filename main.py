@@ -6,7 +6,7 @@ Incluye endpoints para gestión de estudiantes, predicción de riesgo y clusteri
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 import pandas as pd
@@ -16,7 +16,6 @@ import json
 import os
 
 from ml_models import StudentRiskPredictor
-from database import EstudiantesDB
 
 # Inicializar FastAPI
 app = FastAPI(
@@ -34,31 +33,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializar base de datos (intentar PostgreSQL, fallback a memoria)
-try:
-    db = EstudiantesDB()
-    print("✅ Conexión a PostgreSQL establecida")
-    USE_DATABASE = True
-except Exception as e:
-    print(f"⚠️  No se pudo conectar a PostgreSQL: {e}")
-    print("⚠️  Usando almacenamiento en memoria")
-    db = None
-    USE_DATABASE = False
-
 # Cargar o entrenar modelo
 predictor = StudentRiskPredictor()
 if os.path.exists('models/neural_network.pkl'):
     predictor.load_model()
-    print("✅ Modelo de predicción cargado exitosamente")
+    print("Modelo cargado exitosamente")
 else:
-    print("🔄 Entrenando nuevo modelo...")
-    predictor.train('data/estudiantes_data.csv')
+    print("Entrenando nuevo modelo...")
+    predictor.train('estudiantes_data.csv')
     predictor.save_model()
-    print("✅ Modelo entrenado y guardado")
 
-# Cargar datos de estudiantes
-csv_path = 'data/estudiantes_data.csv' if os.path.exists('data/estudiantes_data.csv') else 'estudiantes_data.csv'
-df_students = pd.read_csv(csv_path)
+# --- Reemplazar la carga directa del CSV por una función robusta ---
+def load_students_dataframe():
+    """Intentar cargar estudiantes_data.csv desde varias rutas; devolver DataFrame vacío si no existe."""
+    possible_paths = [
+        'estudiantes_data.csv',
+        os.path.join('data', 'estudiantes_data.csv'),
+        os.path.join('.', 'data', 'estudiantes_data.csv'),
+        os.path.join(os.path.dirname(__file__), 'estudiantes_data.csv'),
+        os.path.join(os.path.dirname(__file__), 'data', 'estudiantes_data.csv'),
+    ]
+    for p in possible_paths:
+        try:
+            if os.path.exists(p):
+                df = pd.read_csv(p)
+                print(f"✅ Cargado CSV de estudiantes desde: {p} ({len(df)} registros)")
+                return df
+        except Exception as e:
+            print(f"⚠️ Error al leer CSV en {p}: {e}")
+    print("⚠️ No se encontró 'estudiantes_data.csv' en rutas habituales. Usando DataFrame vacío.")
+    return pd.DataFrame()
+
+# Reemplazar la línea que hacía: df_students = pd.read_csv('estudiantes_data.csv')
+df_students = load_students_dataframe()
 
 
 # ==================== MODELOS PYDANTIC ====================
@@ -148,32 +155,71 @@ async def perfil_estudiante(codigo: str):
 @app.get("/api/stats", response_model=DashboardStats)
 async def get_dashboard_stats():
     """Obtener estadísticas del dashboard"""
-    # Generar predicciones para todos los estudiantes
-    total = len(df_students)
-    alto_riesgo = 0
+    try:
+        # Si no hay data local, intentar estadísticas desde DB
+        if df_students.empty:
+            try:
+                from database import EstudiantesDB
+                db = EstudiantesDB()
+                stats_db = db.get_statistics()
+                db.close()
+                return DashboardStats(
+                    total_estudiantes=stats_db.get('total_estudiantes', 0),
+                    precision_modelo=92.4,
+                    estudiantes_alto_riesgo=stats_db.get('estudiantes_alto_riesgo', 0),
+                    seguimiento_activo=max(0, stats_db.get('total_estudiantes', 0)//5),
+                    num_clusters=3,
+                    clusters_activos=[
+                        "C1 - Compromiso alto",
+                        "C2 - Estrés académico",
+                        "C3 - Riesgo acumulado"
+                    ]
+                )
+            except Exception:
+                # Fallback a valores por defecto si DB no está disponible
+                return DashboardStats(
+                    total_estudiantes=0,
+                    precision_modelo=92.4,
+                    estudiantes_alto_riesgo=0,
+                    seguimiento_activo=0,
+                    num_clusters=3,
+                    clusters_activos=[
+                        "C1 - Compromiso alto",
+                        "C2 - Estrés académico",
+                        "C3 - Riesgo acumulado"
+                    ]
+                )
 
-    for idx in range(min(total, 100)):  # Limitar para performance
-        row = df_students.iloc[idx]
-        student_dict = row.to_dict()
-        try:
-            pred = predictor.predict_risk(student_dict)
-            if pred['risk_level'] >= 3:
-                alto_riesgo += 1
-        except:
-            pass
+        # Si tenemos df_students, calcular una estimación (limitar para performance)
+        total = len(df_students)
+        alto_riesgo = 0
+        for idx in range(min(total, 100)):
+            row = df_students.iloc[idx]
+            student_dict = row.to_dict()
+            try:
+                pred = predictor.predict_risk(student_dict)
+                if pred['risk_level'] >= 3:
+                    alto_riesgo += 1
+            except Exception:
+                continue
 
-    return DashboardStats(
-        total_estudiantes=total,
-        precision_modelo=92.4,
-        estudiantes_alto_riesgo=alto_riesgo if alto_riesgo > 0 else 9,
-        seguimiento_activo=23,
-        num_clusters=3,
-        clusters_activos=[
-            "C1 - Compromiso alto",
-            "C2 - Estrés académico",
-            "C3 - Riesgo acumulado"
-        ]
-    )
+        return DashboardStats(
+            total_estudiantes=total,
+            precision_modelo=92.4,
+            estudiantes_alto_riesgo=alto_riesgo if alto_riesgo > 0 else 0,
+            seguimiento_activo=total // 5,
+            num_clusters=3,
+            clusters_activos=[
+                "C1 - Compromiso alto",
+                "C2 - Estrés académico",
+                "C3 - Riesgo acumulado"
+            ]
+        )
+    except Exception as e:
+        print(f"❌ Error en /api/stats: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 @app.get("/api/students")
@@ -186,50 +232,116 @@ async def get_all_students(
 ):
     """
     Obtener lista de estudiantes con filtros
+    (manejo robusto cuando faltan columnas esperadas por el predictor)
     """
-    students_list = []
+    try:
+        # Si no hay df_students disponible, intentar recuperar desde DB
+        if df_students.empty:
+            try:
+                from database import EstudiantesDB
+                db = EstudiantesDB()
+                df = db.get_all_students(limit=limit)
+                db.close()
+            except Exception:
+                return {'total': 0, 'showing': '0 a 0', 'students': []}
+        else:
+            df = df_students
 
-    for idx in range(offset, min(offset + limit, len(df_students))):
-        row = df_students.iloc[idx]
-        student_dict = row.to_dict()
+        students_list = []
 
-        # Generar predicción
-        try:
-            pred = predictor.predict_risk(student_dict)
+        n = len(df)
+        start = min(max(0, offset), n)
+        end = min(start + limit, n)
 
-            student_info = {
-                'nombre': f"Estudiante {idx + 1}",
-                'codigo': f"20{2015 + (idx % 8)}{str(idx).zfill(4)}",
-                'carrera': ['Ingeniería', 'Administración', 'Derecho', 'Medicina',
-                           'Psicología', 'Arquitectura', 'Educación'][idx % 7],
-                'promedio': round(student_dict['Promedio_ponderado'], 1),
-                'asistencia': round(student_dict['Asistencia'], 1),
-                'riesgo_predicho': pred['risk_label'],
-                'riesgo_nivel': pred['risk_level'],
-                'cluster_asignado': pred['cluster_name'],
-                'cluster_id': pred['cluster'],
-                'estado_seguimiento': ['En observación', 'En tutoría', 'Pendiente'][idx % 3],
-                'desertion_prob': round(pred['desertion_probability'], 1)
-            }
+        for idx in range(start, end):
+            row = df.iloc[idx]
+            student_dict = row.to_dict()
 
-            # Aplicar filtros
-            if riesgo and riesgo.lower() not in pred['risk_label'].lower():
+            # Intentar predecir de forma segura
+            pred = None
+            try:
+                if predictor and hasattr(predictor, 'predict_risk'):
+                    # predictor puede lanzar KeyError si faltan columnas; proteger
+                    pred = predictor.predict_risk(student_dict)
+                else:
+                    pred = None
+            except Exception as e:
+                # Log y fallback a columnas ya presentes en los datos
+                print(f"⚠️ Error al calcular predicción para fila {idx}: {e}")
+                pred = None
+
+            # Construir información del estudiante con fallback seguro
+            try:
+                risk_label = None
+                risk_level = 0
+                cluster_name = None
+                cluster_id = 0
+                desertion_prob = 0.0
+
+                if pred:
+                    risk_label = pred.get('risk_label') or pred.get('risk') or None
+                    risk_level = int(pred.get('risk_level', 0))
+                    cluster_name = pred.get('cluster_name') or pred.get('cluster') or None
+                    cluster_id = int(pred.get('cluster', pred.get('cluster_id', 0)))
+                    desertion_prob = float(pred.get('desertion_probability', pred.get('desertion_prob', 0)) or 0)
+                else:
+                    # Intentar tomar valores ya guardados en fila (DB/CSV)
+                    risk_label = row.get('riesgo_predicho') or row.get('risk_label') or 'Sin evaluar'
+                    # Mapear algunas cadenas a niveles si es posible
+                    label_map = {
+                        'Sin riesgo': 0, 'Sin_riesgo': 0,
+                        'Riesgo leve': 1, 'Riesgo_leve': 1,
+                        'Riesgo moderado': 2, 'Riesgo_moderado': 2,
+                        'Riesgo alto': 3, 'Riesgo_alto': 3,
+                        'Riesgo crítico': 4, 'Riesgo_critico': 4
+                    }
+                    risk_level = label_map.get(str(risk_label), 0)
+                    cluster_name = row.get('cluster_asignado') or row.get('cluster_name') or 'Sin asignar'
+                    # intentar obtener id de cluster numérico
+                    try:
+                        cluster_id = int(row.get('cluster_asignado') if row.get('cluster_asignado') is not None else row.get('cluster', 0))
+                    except Exception:
+                        cluster_id = 0
+                    desertion_prob = float(row.get('probabilidad_desercion') or row.get('desertion_prob') or 0.0)
+
+                student_info = {
+                    'nombre': row.get('nombre') if 'nombre' in row else f"Estudiante {idx + 1}",
+                    'codigo': row.get('codigo') if 'codigo' in row else f"ID{idx+1}",
+                    'carrera': row.get('carrera') if 'carrera' in row else 'Sin carrera',
+                    'promedio': round(float(row.get('promedio_ponderado') or row.get('Promedio_ponderado', 0)), 1) if (row.get('promedio_ponderado') or row.get('Promedio_ponderado')) is not None else 'N/A',
+                    'asistencia': float(row.get('asistencia') or row.get('Asistencia') or 0),
+                    'riesgo_predicho': risk_label,
+                    'riesgo_nivel': risk_level,
+                    'cluster_asignado': cluster_name,
+                    'cluster_id': cluster_id,
+                    'estado_seguimiento': row.get('estado_seguimiento') if 'estado_seguimiento' in row else 'Pendiente',
+                    'desertion_prob': round(float(desertion_prob or 0), 1)
+                }
+
+                # Aplicar filtros sencillos
+                if riesgo and riesgo.lower() not in str(student_info['riesgo_predicho']).lower():
+                    continue
+                if cluster is not None and int(student_info['cluster_id']) != int(cluster):
+                    continue
+                if estado and estado.lower() not in str(student_info['estado_seguimiento']).lower():
+                    continue
+
+                students_list.append(student_info)
+            except Exception as e:
+                print(f"⚠️ Error al procesar fila {idx}: {e}")
                 continue
-            if cluster is not None and pred['cluster'] != cluster:
-                continue
-            if estado and estado.lower() not in student_info['estado_seguimiento'].lower():
-                continue
 
-            students_list.append(student_info)
-        except Exception as e:
-            print(f"Error procesando estudiante {idx}: {e}")
-            continue
-
-    return {
-        'total': len(students_list),
-        'showing': f"{offset} a {min(offset + limit, len(students_list))}",
-        'students': students_list
-    }
+        return {
+            'total': len(students_list),
+            'showing': f"{start} a {end}",
+            'students': students_list
+        }
+    except Exception as e:
+        print(f"❌ Error en /api/students: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={'success': False, 'message': str(e)}
+        )
 
 
 @app.post("/api/predict", response_model=PredictionResponse)
@@ -272,7 +384,7 @@ async def predict_student_risk(student: StudentData):
 @app.post("/api/students/register")
 async def register_student(profile: StudentProfile):
     """
-    Registrar nuevo estudiante y generar predicción automáticamente
+    Registrar nuevo estudiante y generar predicción
     """
     try:
         # Generar ID único
@@ -281,94 +393,21 @@ async def register_student(profile: StudentProfile):
         # Agregar timestamp
         profile.ultima_actualizacion = datetime.now().isoformat()
 
+        # Guardar en BD
+        students_db[student_id] = profile
+
         # Generar predicción
         prediction = await predict_student_risk(profile.datos)
-
-        # Si usamos PostgreSQL, guardar en la base de datos
-        if USE_DATABASE and db:
-            try:
-                # Preparar datos del estudiante para PostgreSQL
-                student_data_dict = profile.model_dump()
-                student_data_dict['riesgo_predicho'] = prediction.risk_label
-                student_data_dict['cluster_asignado'] = prediction.cluster
-                student_data_dict['probabilidad_desercion'] = prediction.desertion_probability
-
-                # Convertir datos numéricos a formato de base de datos
-                datos_dict = student_data_dict['datos']
-                student_db_data = {
-                    'codigo': profile.codigo,
-                    'nombre': profile.nombre,
-                    'carrera': profile.carrera,
-                    'ciclo': profile.ciclo,
-                    'edad': int(datos_dict.get('Edad', 20)),
-                    'promedio_ponderado': float(datos_dict.get('Promedio_ponderado', 0)),
-                    'creditos_matriculados': int(datos_dict.get('Creditos_matriculados', 0)),
-                    'porcentaje_creditos_aprobados': float(datos_dict.get('Porcentaje_creditos_aprobados', 0)),
-                    'cursos_desaprobados': int(datos_dict.get('Cursos_desaprobados', 0)),
-                    'asistencia_porcentaje': float(datos_dict.get('Asistencia', 0)),
-                    'retiros_cursos': int(datos_dict.get('Retiros_cursos', 0)),
-                    'horas_trabajo_semana': float(datos_dict.get('Horas_trabajo_semana', 0)),
-                    'anio_ingreso': int(datos_dict.get('Anio_ingreso', 2024)),
-                    'numero_ciclos_academicos': int(datos_dict.get('Numero_ciclos_academicos', 1)),
-                    'cursos_matriculados_ciclo': int(datos_dict.get('Cursos_matriculados_ciclo', 0)),
-                    'horas_estudio_semana': float(datos_dict.get('Horas_estudio_semana', 0)),
-                    'indice_regularidad': float(datos_dict.get('indice_regularidad', 0)),
-                    'intentos_aprobacion_curso': int(datos_dict.get('Intentos_aprobacion_curso', 1)),
-                    'nota_promedio': float(datos_dict.get('Nota_promedio', 0)),
-                    'notas_tutor': '',
-                    # Variables categóricas - valores por defecto
-                    'sueno_horas': 'Entre_6_8h',
-                    'actividad_fisica': 'Moderado',
-                    'alimentacion': 'Moderada',
-                    'estilo_de_vida': 'Moderado',
-                    'estres_academico': 'Moderado',
-                    'apoyo_familiar': 'Moderado',
-                    'bienestar': 'Moderado',
-                    'asistencia': 'Frecuente',
-                    'horas_estudio': 'De_1_3h',
-                    'interes_academico': 'Regular',
-                    'rendimiento_academico': 'En_proceso',
-                    'historial_academico': 'Entre_11_15',
-                    'carga_laboral': 'No_trabaja',
-                    'beca': 'No_tiene',
-                    'deudor': 'Sin_deuda'
-                }
-
-                # Insertar estudiante en la base de datos
-                db.insert_student(student_db_data)
-
-                # Actualizar con la predicción
-                prediction_data = {
-                    'riesgo_predicho': prediction.risk_label,
-                    'cluster_asignado': prediction.cluster,
-                    'probabilidad_desercion': prediction.desertion_probability
-                }
-                db.update_prediction(profile.codigo, prediction_data)
-
-                print(f"✅ Estudiante {profile.nombre} guardado en PostgreSQL con predicción")
-
-            except Exception as db_error:
-                print(f"⚠️  Error al guardar en PostgreSQL: {db_error}")
-                # Continuar con almacenamiento en memoria
-                students_db[student_id] = profile
-                predictions_db[student_id] = prediction
-        else:
-            # Guardar en memoria
-            students_db[student_id] = profile
-            predictions_db[student_id] = prediction
+        predictions_db[student_id] = prediction
 
         return {
             'status': 'success',
             'message': f'Estudiante {profile.nombre} registrado exitosamente',
             'student_id': student_id,
-            'prediction': prediction.model_dump(),
-            'database_used': 'PostgreSQL' if USE_DATABASE else 'Memoria'
+            'prediction': prediction
         }
 
     except Exception as e:
-        print(f"❌ Error al registrar estudiante: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al registrar: {str(e)}")
 
 
@@ -376,83 +415,8 @@ async def register_student(profile: StudentProfile):
 async def get_student_profile(codigo: str):
     """
     Obtener perfil completo de un estudiante
+    (protegido cuando no hay CSV/DB disponible)
     """
-    # Buscar en PostgreSQL si está disponible
-    if USE_DATABASE and db:
-        try:
-            student_data = db.get_student_by_codigo(codigo)
-            if student_data:
-                # Construir diccionario para predicción
-                student_dict = {
-                    'Promedio_ponderado': float(student_data.get('promedio_ponderado', 14)),
-                    'Creditos_matriculados': float(student_data.get('creditos_matriculados', 20)),
-                    'Porcentaje_creditos_aprobados': float(student_data.get('porcentaje_creditos_aprobados', 75)),
-                    'Cursos_desaprobados': float(student_data.get('cursos_desaprobados', 0)),
-                    'Asistencia': float(student_data.get('asistencia_porcentaje', 85)),
-                    'Retiros_cursos': float(student_data.get('retiros_cursos', 0)),
-                    'Edad': float(student_data.get('edad', 20)),
-                    'Horas_trabajo_semana': float(student_data.get('horas_trabajo_semana', 0)),
-                    'Anio_ingreso': int(student_data.get('anio_ingreso', 2020)),
-                    'Numero_ciclos_academicos': float(student_data.get('numero_ciclos_academicos', 5)),
-                    'Cursos_matriculados_ciclo': float(student_data.get('cursos_matriculados_ciclo', 6)),
-                    'Horas_estudio_semana': float(student_data.get('horas_estudio_semana', 15)),
-                    'indice_regularidad': float(student_data.get('indice_regularidad', 65)),
-                    'Intentos_aprobacion_curso': float(student_data.get('intentos_aprobacion_curso', 1)),
-                    'Nota_promedio': float(student_data.get('nota_promedio', 14))
-                }
-
-                # Si ya tiene predicción guardada, usarla, sino generar nueva
-                if student_data.get('riesgo_predicho'):
-                    # Usar predicción guardada
-                    prediction = {
-                        'risk_label': student_data.get('riesgo_predicho'),
-                        'cluster': student_data.get('cluster_asignado', 0),
-                        'cluster_name': f"C{student_data.get('cluster_asignado', 0)} - Cluster",
-                        'desertion_probability': float(student_data.get('probabilidad_desercion', 0)),
-                        'risk_level': 0,  # Calcular desde label
-                        'risk_probability': 0.0
-                    }
-                else:
-                    # Generar nueva predicción
-                    prediction = predictor.predict_risk(student_dict)
-
-                return {
-                    'student': {
-                        'codigo': student_data.get('codigo'),
-                        'nombre': student_data.get('nombre'),
-                        'carrera': student_data.get('carrera'),
-                        'ciclo': student_data.get('ciclo'),
-                        'edad': student_data.get('edad'),
-                        'datos': student_dict
-                    },
-                    'prediction': {
-                        **prediction,
-                        'recommendations': generate_recommendations(
-                            prediction.get('risk_level', 0),
-                            student_dict,
-                            prediction.get('cluster', 0)
-                        ),
-                        'key_factors': identify_key_factors(student_dict, prediction.get('risk_level', 0))
-                    },
-                    'resumen_academico': {
-                        'promedio_ponderado': round(student_dict['Promedio_ponderado'], 1),
-                        'creditos_cursados': int(student_dict['Creditos_matriculados'] * 2.2),
-                        'asistencia_ultimas_4_semanas': f"{int(student_dict['Asistencia'])}%",
-                        'horas_estudio_promedio': round(student_dict['Horas_estudio_semana'] / 7, 1)
-                    },
-                    'datos_basicos': {
-                        'edad': f"{int(student_dict['Edad'])} años",
-                        'carga_laboral': f"{'Parcial' if student_dict['Horas_trabajo_semana'] > 0 else 'No trabaja'} - {int(student_dict['Horas_trabajo_semana'])} h/sem",
-                        'beca': student_data.get('beca', 'No_tiene').replace('_', ' '),
-                        'deudor': student_data.get('deudor', 'Sin_deuda').replace('_', ' '),
-                        'apoyo_familiar': student_data.get('apoyo_familiar', 'Moderado'),
-                        'modalidad': "Presencial"
-                    },
-                    'source': 'PostgreSQL'
-                }
-        except Exception as e:
-            print(f"⚠️  Error al obtener estudiante de PostgreSQL: {e}")
-
     # Buscar en la base de datos simulada
     if codigo in students_db:
         student = students_db[codigo]
@@ -461,48 +425,128 @@ async def get_student_profile(codigo: str):
         return {
             'student': student,
             'prediction': prediction,
-            'last_update': student.ultima_actualizacion,
-            'source': 'Memoria'
+            'last_update': student.ultima_actualizacion
         }
 
-    # Si no existe, generar uno de ejemplo
+    # Si no existe en memoria, intentar DB o CSV; si no hay datos, crear ejemplo seguro
     try:
-        idx = int(codigo[-4:]) % len(df_students)
-        row = df_students.iloc[idx]
-        student_dict = row.to_dict()
-        prediction = predictor.predict_risk(student_dict)
+        if not df_students.empty:
+            # Evitar modulo por cero (df_students no está vacío aquí)
+            try:
+                idx = int(codigo[-4:]) % len(df_students)
+            except Exception:
+                idx = 0
+            row = df_students.iloc[idx]
+            student_dict = row.to_dict()
+            try:
+                prediction = predictor.predict_risk(student_dict) if predictor and hasattr(predictor, 'predict_risk') else {
+                    'risk_label': row.get('riesgo_predicho', 'No disponible'),
+                    'cluster_name': row.get('cluster_asignado', 'No asignado'),
+                    'risk_probability': float(row.get('probabilidad_desercion', 0) or 0),
+                    'desertion_probability': float(row.get('probabilidad_desercion', 0) or 0),
+                    'risk_level': 0,
+                    'cluster': int(row.get('cluster_asignado') or 0)
+                }
+            except Exception as e:
+                print(f"⚠️ Error al predecir perfil (fallback): {e}")
+                prediction = {
+                    'risk_label': row.get('riesgo_predicho', 'No disponible'),
+                    'cluster_name': row.get('cluster_asignado', 'No asignado'),
+                    'risk_probability': float(row.get('probabilidad_desercion', 0) or 0),
+                    'desertion_probability': float(row.get('probabilidad_desercion', 0) or 0),
+                    'risk_level': 0,
+                    'cluster': int(row.get('cluster_asignado') or 0)
+                }
 
+            return {
+                'student': {
+                    'codigo': codigo,
+                    'nombre': row.get('nombre', f'Estudiante {codigo}'),
+                    'carrera': row.get('carrera', 'Sin carrera'),
+                    'ciclo': row.get('ciclo', 0),
+                    'edad': int(row.get('edad') or row.get('Edad') or 20),
+                    'datos': student_dict
+                },
+                'prediction': {
+                    **prediction,
+                    'recommendations': generate_recommendations(
+                        prediction.get('risk_level', 0),
+                        student_dict,
+                        prediction.get('cluster', 0)
+                    ),
+                    'key_factors': identify_key_factors(student_dict, prediction.get('risk_level', 0))
+                },
+                'resumen_academico': {
+                    'promedio_ponderado': round(float(row.get('promedio_ponderado') or row.get('Promedio_ponderado', 0)), 1),
+                    'creditos_cursados': int(row.get('creditos_matriculados') or row.get('Creditos_matriculados') or 0),
+                    'asistencia_ultimas_4_semanas': f"{int(row.get('asistencia') or row.get('Asistencia') or 0)}%"
+                },
+                'datos_basicos': {
+                    'edad': f"{int(row.get('edad') or row.get('Edad') or 20)} años",
+                    'carga_laboral': f"{row.get('carga_laboral', 'No_trabaja')}",
+                    'beca': row.get('beca', 'No_tiene'),
+                    'deudor': row.get('deudor', 'Sin_deuda'),
+                    'apoyo_familiar': row.get('apoyo_familiar', 'Moderado'),
+                    'modalidad': 'Presencial'
+                }
+            }
+
+        # Si no hay CSV, intentar DB
+        try:
+            from database import EstudiantesDB
+            db = EstudiantesDB()
+            student_row = db.get_student_by_codigo(codigo)
+            db.close()
+            if student_row:
+                s = dict(student_row)
+                prediction = {
+                    'risk_label': s.get('riesgo_predicho', 'No disponible'),
+                    'cluster_name': s.get('cluster_asignado', 'No asignado'),
+                    'risk_probability': float(s.get('probabilidad_desercion', 0) or 0),
+                    'desertion_probability': float(s.get('probabilidad_desercion', 0) or 0),
+                    'risk_level': 0,
+                    'cluster': int(s.get('cluster_asignado') or 0)
+                }
+                return {
+                    'student': s,
+                    'prediction': prediction,
+                    'resumen_academico': {
+                        'promedio_ponderado': s.get('promedio_ponderado', 0),
+                        'creditos_cursados': 0,
+                        'asistencia_ultimas_4_semanas': 'N/D'
+                    }
+                }
+        except Exception:
+            pass
+
+        # Fallback: crear perfil sintético si no hay datos disponibles
+        ejemplo = {
+            'codigo': codigo,
+            'nombre': f'Estudiante {codigo}',
+            'carrera': 'Sin carrera',
+            'ciclo': 0,
+            'edad': 20,
+            'datos': {}
+        }
+        prediction_fallback = {
+            'risk_label': 'Sin evaluar',
+            'cluster_name': 'Sin asignar',
+            'risk_probability': 0.0,
+            'desertion_probability': 0.0,
+            'risk_level': 0,
+            'cluster': 0
+        }
         return {
-            'student': {
-                'codigo': codigo,
-                'nombre': f"Ana Castillo Rojas" if idx % 2 == 0 else f"Bruno Fernández",
-                'carrera': 'Ingeniería de Sistemas',
-                'ciclo': 3,
-                'edad': int(student_dict['Edad']),
-                'datos': student_dict
-            },
+            'student': ejemplo,
             'prediction': {
-                **prediction,
-                'recommendations': generate_recommendations(
-                    prediction['risk_level'],
-                    student_dict,
-                    prediction['cluster']
-                ),
-                'key_factors': identify_key_factors(student_dict, prediction['risk_level'])
+                **prediction_fallback,
+                'recommendations': ['No hay datos suficientes para generar recomendaciones'],
+                'key_factors': []
             },
             'resumen_academico': {
-                'promedio_ponderado': round(student_dict['Promedio_ponderado'], 1),
-                'creditos_cursados': int(student_dict['Creditos_matriculados'] * 2.2),
-                'asistencia_ultimas_4_semanas': f"{int(student_dict['Asistencia'])}%",
-                'horas_estudio_promedio': round(student_dict['Horas_estudio_semana'] / 7, 1)
-            },
-            'datos_basicos': {
-                'edad': f"{int(student_dict['Edad'])} años",
-                'carga_laboral': f"Parcial - {int(student_dict['Horas_trabajo_semana'])} h/sem",
-                'beca': "Beca parcial (50%)" if student_dict['Promedio_ponderado'] > 16 else "Sin beca",
-                'deudor': "Sin deuda activa" if idx % 2 == 0 else "Deudor",
-                'apoyo_familiar': "Fuerte" if student_dict['Horas_trabajo_semana'] < 20 else "Moderado",
-                'modalidad': "Presencial"
+                'promedio_ponderado': 0,
+                'creditos_cursados': 0,
+                'asistencia_ultimas_4_semanas': 'N/D'
             }
         }
 
@@ -602,6 +646,74 @@ async def export_students(formato: str = "csv"):
         )
     else:
         raise HTTPException(status_code=400, detail="Formato no soportado")
+
+
+@app.get("/api/students/search")
+async def search_students(q: str = "", limit: int = 10):
+    """
+    Buscar estudiantes por nombre o código (compatible con frontend/registro.html).
+    Retorna JSON: { "success": True, "results": [ {codigo,nombre,carrera,ciclo}, ... ] }
+    """
+    try:
+        q_clean = (q or "").strip().lower()
+        if q_clean == "":
+            return {'success': True, 'results': []}
+
+        results = []
+
+        # 1) Buscar en df_students si está cargado
+        if not df_students.empty:
+            df = df_students
+            # Normalizar columnas y buscar en nombre/codigo (tolerante a mayúsculas)
+            for _, row in df.iterrows():
+                nombre = str(row.get('nombre', '')).lower()
+                codigo = str(row.get('codigo', '')).lower()
+                if q_clean in nombre or q_clean in codigo:
+                    results.append({
+                        'codigo': row.get('codigo'),
+                        'nombre': row.get('nombre'),
+                        'carrera': row.get('carrera'),
+                        'ciclo': row.get('ciclo')
+                    })
+                    if len(results) >= limit:
+                        break
+
+            return {'success': True, 'results': results}
+
+        # 2) Si no hay CSV, intentar consultar la base de datos
+        try:
+            from database import EstudiantesDB
+            db = EstudiantesDB()
+            # Usar consulta parametrizada para evitar inyección (LIKE con %)
+            sql = """
+                SELECT codigo, nombre, carrera, ciclo
+                FROM estudiantes
+                WHERE LOWER(nombre) LIKE %(q)s OR LOWER(codigo) LIKE %(q)s
+                LIMIT %(limit)s
+            """
+            params = {'q': f"%{q_clean}%", 'limit': limit}
+            rows = db.db.fetch_all(sql, params)
+            db.close()
+
+            # db.db.fetch_all puede devolver list[dict]
+            for r in rows:
+                results.append({
+                    'codigo': r.get('codigo'),
+                    'nombre': r.get('nombre'),
+                    'carrera': r.get('carrera'),
+                    'ciclo': r.get('ciclo')
+                })
+
+            return {'success': True, 'results': results}
+
+        except Exception as db_err:
+            # Fallback vacío si DB no disponible
+            print(f"⚠️ Búsqueda en DB falló: {db_err}")
+            return {'success': True, 'results': []}
+
+    except Exception as e:
+        print(f"❌ Error en /api/students/search: {e}")
+        return JSONResponse(status_code=500, content={'success': False, 'message': str(e)})
 
 
 # ==================== FUNCIONES AUXILIARES ====================

@@ -19,6 +19,23 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 ---
 
+## 📝 Instrucciones Breves
+
+1) Abrir terminal en la raíz del proyecto.
+2) Activar entorno virtual (Windows):
+   - venv\Scripts\activate
+3) Iniciar servidor:
+   - python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   - o ejecutar START_SYSTEM.bat
+4) Probar endpoint de búsqueda:
+   - Navegador o curl: http://localhost:8000/api/students/search?q=ana&limit=10
+   - Respuesta esperada: {"success": true, "results": [...]}
+5) Si recibe 404:
+   - Verifique que uvicorn arrancó con main:app (módulo "main.py").
+   - Reinicie el servidor después de editar archivos.
+
+---
+
 ## 📝 Funcionalidades Implementadas
 
 ### ✅ 1. Registro de Estudiantes con Predicción Automática

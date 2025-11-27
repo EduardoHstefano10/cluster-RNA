@@ -271,31 +271,76 @@ async def get_students(limit: int = 10):
 
 
 @app.get("/api/students/search")
-async def search_students(q: str, limit: int = 10):
-    """Buscar estudiantes por nombre o código"""
+async def search_students(q: str = "", limit: int = 10):
+    """
+    Endpoint de búsqueda compatible con frontend (registro.html / panel.html).
+    Busca en PostgreSQL si está disponible, si no usa CSV local como fallback.
+    Siempre retorna { success: True, results: [...] } en caso normal.
+    """
     try:
-        from database import EstudiantesDB
-        db = EstudiantesDB()
-        
-        query = f"""
-        SELECT codigo, nombre, carrera, ciclo
-        FROM estudiantes
-        WHERE LOWER(nombre) LIKE LOWER('%{q}%')
-           OR codigo LIKE '%{q}%'
-        LIMIT {limit}
-        """
-        
-        results = db.db.fetch_all(query)
-        db.close()
-        
-        return {'success': True, 'results': results}
-        
+        q_clean = (q or "").strip().lower()
+        if not q_clean:
+            return {"success": True, "results": []}
+
+        results = []
+
+        # 1) Intentar buscar en la base de datos (si existe)
+        try:
+            from database import EstudiantesDB
+            db = EstudiantesDB()
+            df = db.get_all_students(limit=200)  # traer un bloque razonable
+            db.close()
+            if isinstance(df, (pd.DataFrame,)) and not df.empty:
+                for _, row in df.iterrows():
+                    nombre = str(row.get('nombre', '')).lower()
+                    codigo = str(row.get('codigo', '')).lower()
+                    if q_clean in nombre or q_clean in codigo:
+                        results.append({
+                            'codigo': row.get('codigo'),
+                            'nombre': row.get('nombre'),
+                            'carrera': row.get('carrera'),
+                            'ciclo': row.get('ciclo')
+                        })
+                        if len(results) >= limit:
+                            break
+                return {"success": True, "results": results}
+        except Exception as db_err:
+            print("⚠️ students/search: búsqueda en DB falló:", db_err)
+
+        # 2) Fallback: buscar en CSV local si existe
+        possible_paths = [
+            'estudiantes_data.csv',
+            os.path.join('data', 'estudiantes_data.csv'),
+            os.path.join(os.path.dirname(__file__), 'estudiantes_data.csv'),
+            os.path.join(os.path.dirname(__file__), 'data', 'estudiantes_data.csv'),
+        ]
+        for p in possible_paths:
+            try:
+                if os.path.exists(p):
+                    df_csv = pd.read_csv(p)
+                    for _, row in df_csv.iterrows():
+                        nombre = str(row.get('nombre', '')).lower()
+                        codigo = str(row.get('codigo', '')).lower()
+                        if q_clean in nombre or q_clean in codigo:
+                            results.append({
+                                'codigo': row.get('codigo'),
+                                'nombre': row.get('nombre'),
+                                'carrera': row.get('carrera'),
+                                'ciclo': row.get('ciclo')
+                            })
+                            if len(results) >= limit:
+                                break
+                    return {"success": True, "results": results}
+            except Exception as e:
+                print(f"⚠️ students/search: error leyendo CSV {p}: {e}")
+                # seguir intentando otras rutas
+
+        # 3) Ningún origen disponible -> devolver lista vacía (frontend no debería recibir 404)
+        return {"success": True, "results": []}
+
     except Exception as e:
-        print(f"❌ Error en búsqueda: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={'success': False, 'message': str(e)}
-        )
+        print("❌ Error en /api/students/search:", e)
+        return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
 
 
 @app.get("/api/students/{codigo}")
