@@ -61,6 +61,7 @@ Thumbs.db
 logs/
 
 # Environment
+.env
 .env.local
 .env.*.local
 

@@ -16,13 +16,22 @@ load_dotenv()
 
 
 def get_db_connection():
-    """Obtener conexión a PostgreSQL"""
+    """Obtener conexión a PostgreSQL (soporta DATABASE_URL y variables individuales)"""
+    # Opción 1: Usar DATABASE_URL si está disponible
+    database_url = os.getenv('DATABASE_URL') or os.getenv('DATABASE_PUBLIC_URL')
+
+    if database_url:
+        print("🔗 Usando DATABASE_URL para conectar...")
+        return psycopg2.connect(database_url)
+
+    # Opción 2: Usar variables individuales
+    print("🔗 Usando variables individuales para conectar...")
     return psycopg2.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        port=int(os.getenv('DB_PORT', 5432)),
-        database=os.getenv('DB_NAME', 'estudiantes_db'),
-        user=os.getenv('DB_USER', 'cluster_user'),
-        password=os.getenv('DB_PASSWORD', 'cluster_pass_2024')
+        host=os.getenv('PGHOST', os.getenv('DB_HOST', 'localhost')),
+        port=int(os.getenv('PGPORT', os.getenv('DB_PORT', 5432))),
+        database=os.getenv('PGDATABASE', os.getenv('DB_NAME', 'railway')),
+        user=os.getenv('PGUSER', os.getenv('DB_USER', 'postgres')),
+        password=os.getenv('PGPASSWORD', os.getenv('DB_PASSWORD', ''))
     )
 
 
