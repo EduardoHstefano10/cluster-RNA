@@ -136,7 +136,7 @@ class EstudiantesDB:
         return pd.DataFrame(data)
 
     def insert_student(self, student_data: Dict) -> bool:
-        """Insertar nuevo estudiante"""
+        """Insertar nuevo estudiante (upsert si ya existe el código)"""
         query = """
         INSERT INTO estudiantes (
             codigo, nombre, carrera, ciclo,
@@ -153,14 +153,41 @@ class EstudiantesDB:
             %(historial_academico)s, %(carga_laboral)s, %(beca)s, %(deudor)s,
             %(promedio_ponderado)s, %(edad)s, %(notas_tutor)s
         )
+        ON CONFLICT (codigo) DO UPDATE SET
+            nombre = EXCLUDED.nombre,
+            carrera = EXCLUDED.carrera,
+            ciclo = EXCLUDED.ciclo,
+            sueno_horas = EXCLUDED.sueno_horas,
+            actividad_fisica = EXCLUDED.actividad_fisica,
+            alimentacion = EXCLUDED.alimentacion,
+            estilo_de_vida = EXCLUDED.estilo_de_vida,
+            estres_academico = EXCLUDED.estres_academico,
+            apoyo_familiar = EXCLUDED.apoyo_familiar,
+            bienestar = EXCLUDED.bienestar,
+            asistencia = EXCLUDED.asistencia,
+            horas_estudio = EXCLUDED.horas_estudio,
+            interes_academico = EXCLUDED.interes_academico,
+            rendimiento_academico = EXCLUDED.rendimiento_academico,
+            historial_academico = EXCLUDED.historial_academico,
+            carga_laboral = EXCLUDED.carga_laboral,
+            beca = EXCLUDED.beca,
+            deudor = EXCLUDED.deudor,
+            promedio_ponderado = EXCLUDED.promedio_ponderado,
+            edad = EXCLUDED.edad,
+            notas_tutor = EXCLUDED.notas_tutor,
+            ultima_actualizacion = CURRENT_TIMESTAMP
+        RETURNING id
         """
         try:
             self.db.cursor.execute(query, student_data)
             self.db.conn.commit()
             return True
         except Exception as e:
-            print(f"❌ Error al insertar estudiante: {e}")
-            self.db.conn.rollback()
+            print(f"❌ Error al insertar/actualizar estudiante: {e}")
+            try:
+                self.db.conn.rollback()
+            except Exception:
+                pass
             return False
 
     def update_prediction(self, codigo: str, prediction_data: Dict) -> bool:

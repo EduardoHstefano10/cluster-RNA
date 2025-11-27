@@ -116,6 +116,19 @@ async def perfil_estudiante(codigo: str):
         )
 
 
+@app.get("/perfil", response_class=HTMLResponse)
+async def perfil_estudiante_query():
+    """Servir la página de perfil (soporta URL con ?codigo=... desde el frontend antiguo)"""
+    try:
+        with open('frontend/perfil.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Error: No se encontró el archivo perfil.html</h1>",
+            status_code=404
+        )
+
+
 # ==================== ENDPOINTS API ====================
 
 @app.get("/api/stats")
@@ -352,50 +365,102 @@ async def search_students(q: str = "", limit: int = 10):
 
 @app.get("/api/students/{codigo}")
 async def get_student_profile(codigo: str):
-    """Obtener perfil completo de un estudiante desde PostgreSQL"""
+    """Obtener perfil completo de un estudiante desde PostgreSQL (con fallback a CSV)"""
     try:
         db = EstudiantesDB()
         student = db.get_student_by_codigo(codigo)
         db.close()
 
-        if not student:
-            raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-
-        student_dict = dict(student)
-
-        # Preparar respuesta con estructura esperada por el frontend
-        return {
-            'student': {
-                'codigo': student_dict.get('codigo'),
-                'nombre': student_dict.get('nombre'),
-                'carrera': student_dict.get('carrera'),
-                'ciclo': student_dict.get('ciclo'),
-                'edad': student_dict.get('edad', 20)
-            },
-            'prediction': {
-                'risk_label': student_dict.get('riesgo_predicho', 'Sin evaluar'),
-                'cluster_name': get_cluster_name(student_dict.get('cluster_asignado')),
-                'risk_probability': float(student_dict.get('probabilidad_desercion', 0) or 0),
-                'desertion_probability': float(student_dict.get('probabilidad_desercion', 0) or 0),
-                'risk_level': map_risk_to_level(student_dict.get('riesgo_predicho')),
-                'cluster': student_dict.get('cluster_asignado', 0),
-                'recommendations': generar_recomendaciones(student_dict),
-                'key_factors': generar_factores_clave(student_dict)
-            },
-            'resumen_academico': {
-                'promedio_ponderado': round(float(student_dict.get('promedio_ponderado', 0) or 0), 1),
-                'creditos_cursados': student_dict.get('creditos_matriculados', 0) or 44,
-                'asistencia_ultimas_4_semanas': f"{student_dict.get('asistencia_porcentaje', 87)}%"
-            },
-            'datos_basicos': {
-                'edad': f"{student_dict.get('edad', 20)} años",
-                'carga_laboral': format_carga_laboral(student_dict.get('carga_laboral')),
-                'beca': format_beca(student_dict.get('beca')),
-                'deudor': format_deudor(student_dict.get('deudor')),
-                'apoyo_familiar': student_dict.get('apoyo_familiar', 'Moderado'),
-                'modalidad': 'Presencial'
+        if student:
+            student_dict = dict(student)
+            return {
+                'student': {
+                    'codigo': student_dict.get('codigo'),
+                    'nombre': student_dict.get('nombre'),
+                    'carrera': student_dict.get('carrera'),
+                    'ciclo': student_dict.get('ciclo'),
+                    'edad': student_dict.get('edad', 20)
+                },
+                'prediction': {
+                    'risk_label': student_dict.get('riesgo_predicho', 'Sin evaluar'),
+                    'cluster_name': get_cluster_name(student_dict.get('cluster_asignado')),
+                    'risk_probability': float(student_dict.get('probabilidad_desercion', 0) or 0),
+                    'desertion_probability': float(student_dict.get('probabilidad_desercion', 0) or 0),
+                    'risk_level': map_risk_to_level(student_dict.get('riesgo_predicho')),
+                    'cluster': student_dict.get('cluster_asignado', 0),
+                    'recommendations': generar_recomendaciones(student_dict),
+                    'key_factors': generar_factores_clave(student_dict)
+                },
+                'resumen_academico': {
+                    'promedio_ponderado': round(float(student_dict.get('promedio_ponderado', 0) or 0), 1),
+                    'creditos_cursados': student_dict.get('creditos_matriculados', 0) or 44,
+                    'asistencia_ultimas_4_semanas': f"{student_dict.get('asistencia_porcentaje', 87)}%"
+                },
+                'datos_basicos': {
+                    'edad': f"{student_dict.get('edad', 20)} años",
+                    'carga_laboral': format_carga_laboral(student_dict.get('carga_laboral')),
+                    'beca': format_beca(student_dict.get('beca')),
+                    'deudor': format_deudor(student_dict.get('deudor')),
+                    'apoyo_familiar': student_dict.get('apoyo_familiar', 'Moderado'),
+                    'modalidad': 'Presencial'
+                }
             }
-        }
+
+        # FALLBACK a CSV local si no está en BD
+        possible_paths = [
+            'estudiantes_data.csv',
+            os.path.join('data', 'estudiantes_data.csv'),
+            os.path.join(os.path.dirname(__file__), 'estudiantes_data.csv'),
+            os.path.join(os.path.dirname(__file__), 'data', 'estudiantes_data.csv'),
+        ]
+        for p in possible_paths:
+            try:
+                if os.path.exists(p):
+                    df_csv = pd.read_csv(p, dtype=str).fillna('')
+                    matched = df_csv[df_csv.apply(lambda r: str(r.get('codigo','')).strip() == str(codigo).strip(), axis=1)]
+                    if matched.shape[0] > 0:
+                        row = matched.iloc[0].to_dict()
+                        # construir estructuras mínimas esperadas por el frontend
+                        student_basic = {
+                            'codigo': row.get('codigo', codigo),
+                            'nombre': row.get('nombre', row.get('Nombre', 'Sin nombre')),
+                            'carrera': row.get('carrera', row.get('Carrera', None)),
+                            'ciclo': int(row.get('ciclo', row.get('Ciclo', 0))) if str(row.get('ciclo','')).isdigit() else None,
+                            'edad': int(row.get('Edad', 20)) if str(row.get('Edad','')).isdigit() else 20
+                        }
+                        prediction = {
+                            'risk_label': row.get('riesgo_predicho', 'Sin evaluar'),
+                            'cluster_name': row.get('cluster_asignado', 'Sin asignar'),
+                            'risk_probability': float(row.get('probabilidad_desercion', 0) or 0),
+                            'desertion_probability': float(row.get('probabilidad_desercion', 0) or 0),
+                            'risk_level': map_risk_to_level(row.get('riesgo_predicho'))
+                        }
+                        resumen = {
+                            'promedio_ponderado': float(row.get('Promedio_ponderado', row.get('promedio_ponderado', 0)) or 0),
+                            'creditos_cursados': int(row.get('Creditos_matriculados', 44) or 44),
+                            'asistencia_ultimas_4_semanas': f"{int(float(row.get('Asistencia', row.get('asistencia_porcentaje', 87)) or 0))}%"
+                        }
+                        datos_basicos = {
+                            'edad': f"{student_basic.get('edad', 20)} años",
+                            'carga_laboral': row.get('carga_laboral', 'No_trabaja'),
+                            'beca': row.get('beca', 'No_tiene'),
+                            'deudor': row.get('deudor', 'Sin_deuda'),
+                            'apoyo_familiar': row.get('apoyo_familiar', 'Moderado'),
+                            'modalidad': 'Presencial'
+                        }
+
+                        return {
+                            'student': student_basic,
+                            'prediction': prediction,
+                            'resumen_academico': resumen,
+                            'datos_basicos': datos_basicos
+                        }
+            except Exception as e:
+                print(f"⚠️ Error leyendo CSV fallback {p}: {e}")
+                continue
+
+        # No encontrado en BD ni CSV
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
 
     except Exception as e:
         print(f"❌ Error al obtener perfil: {e}")
@@ -565,18 +630,24 @@ def generar_recomendaciones(student_dict: dict) -> List[str]:
     """Generar recomendaciones basadas en el perfil del estudiante"""
     recomendaciones = []
 
-    riesgo = student_dict.get('riesgo_predicho', '')
-    estres = student_dict.get('estres_academico', '')
-    carga_laboral = student_dict.get('carga_laboral', '')
+    # Asegurar valores por defecto para evitar NoneType
+    riesgo = str(student_dict.get('riesgo_predicho') or '')
+    estres = str(student_dict.get('estres_academico') or '')
+    carga_laboral = str(student_dict.get('carga_laboral') or '')
 
-    if 'alto' in riesgo.lower() or 'critico' in riesgo.lower():
+    # Normalizar para comparaciones seguras
+    riesgo_lower = riesgo.lower()
+    estres_norm = estres.lower()
+    carga_norm = carga_laboral.lower()
+
+    if 'alto' in riesgo_lower or 'critico' in riesgo_lower or 'crítico' in riesgo_lower:
         recomendaciones.append("Agendar una sesión de orientación académica prioritaria")
         recomendaciones.append("Coordinar derivación opcional a bienestar psicológico para manejo de estrés")
 
-    if estres in ['Alto', 'Severo', 'Crítico']:
+    if estres_norm in ['alto', 'severo', 'crítico', 'critico']:
         recomendaciones.append("Desarrollar estrategias de manejo de estrés académico")
 
-    if carga_laboral == 'Completa':
+    if carga_norm == 'completa':
         recomendaciones.append("Explorar ajustes de horario laboral o negociación de turnos")
 
     if not recomendaciones:
@@ -590,28 +661,34 @@ def generar_factores_clave(student_dict: dict) -> List[Dict[str, str]]:
     """Generar factores clave del riesgo"""
     factores = []
 
-    estres = student_dict.get('estres_academico', '')
-    if estres in ['Alto', 'Severo', 'Crítico']:
+    # Asegurar valores por defecto para evitar NoneType
+    estres = str(student_dict.get('estres_academico') or '')
+    carga_laboral = str(student_dict.get('carga_laboral') or '')
+    apoyo_familiar = str(student_dict.get('apoyo_familiar') or '')
+
+    estres_norm = estres.lower()
+    carga_norm = carga_laboral.lower()
+    apoyo_norm = apoyo_familiar.lower()
+
+    if estres_norm in ['alto', 'severo', 'crítico', 'critico']:
         factores.append({
             'factor': 'Estrés académico',
             'nivel': 'Alto impacto',
-            'descripcion': f'Nivel de estrés: {estres}'
+            'descripcion': f'Nivel de estrés: {estres or "No especificado"}'
         })
 
-    carga_laboral = student_dict.get('carga_laboral', '')
-    if carga_laboral in ['Parcial', 'Completa']:
+    if carga_norm in ['parcial', 'completa']:
         factores.append({
             'factor': 'Carga laboral',
             'nivel': 'Incrementa el riesgo',
-            'descripcion': f'Carga laboral: {carga_laboral}'
+            'descripcion': f'Carga laboral: {carga_laboral or "No especificado"}'
         })
 
-    apoyo_familiar = student_dict.get('apoyo_familiar', '')
-    if apoyo_familiar in ['Fuerte', 'Moderado']:
+    if apoyo_norm in ['fuerte', 'moderado']:
         factores.append({
             'factor': 'Apoyo familiar',
             'nivel': 'Factor protector',
-            'descripcion': f'Apoyo: {apoyo_familiar}'
+            'descripcion': f'Apoyo: {apoyo_familiar or "No especificado"}'
         })
 
     return factores

@@ -668,11 +668,15 @@
 
         // Ver perfil del estudiante
         function viewProfile(codigo) {
+            // Validación mínima
             if (!codigo || codigo === 'N/A') {
                 alert('⚠️ Código de estudiante inválido');
                 return;
             }
-            window.location.href = `/frontend/perfil.html?codigo=${codigo}`;
+
+            // Navegar usando segmento de path para que el backend /perfil/{codigo} responda correctamente
+            // Antes se usaba: window.location.href = `/perfil?codigo=${codigo}` (provocaba 404)
+            window.location.href = `/perfil/${encodeURIComponent(codigo)}`;
         }
 
         // Exportar listado

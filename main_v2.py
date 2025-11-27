@@ -4,7 +4,7 @@ Incluye reentrenamiento automático y predicción en tiempo real
 """
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import numpy as np
@@ -349,33 +349,81 @@ async def get_student(codigo: str):
     try:
         from database import EstudiantesDB
         db = EstudiantesDB()
-        
         student = db.get_student_by_codigo(codigo)
         db.close()
-        
-        if not student:
-            return JSONResponse(
-                status_code=404,
-                content={'success': False, 'message': 'Estudiante no encontrado'}
-            )
-        
-        return {
-            'success': True,
-            'student': dict(student),
-            'prediction': {
-                'risk_label': student.get('riesgo_predicho', 'No disponible'),
-                'cluster_name': student.get('cluster_asignado', 'No asignado'),
-                'risk_probability': student.get('probabilidad_desercion', 0)
-            },
-            'resumen_academico': {
-                'promedio_ponderado': student.get('promedio_ponderado', 0),
-                'creditos_cursados': 44,
-                'asistencia_ultimas_4_semanas': '87%'
+
+        # Si lo encontramos en la BD, devolver la estructura normal
+        if student:
+            return {
+                'success': True,
+                'student': dict(student),
+                'prediction': {
+                    'risk_label': student.get('riesgo_predicho', 'No disponible'),
+                    'cluster_name': student.get('cluster_asignado', 'No asignado'),
+                    'risk_probability': student.get('probabilidad_desercion', 0)
+                },
+                'resumen_academico': {
+                    'promedio_ponderado': student.get('promedio_ponderado', 0),
+                    'creditos_cursados': 44,
+                    'asistencia_ultimas_4_semanas': '87%'
+                }
             }
-        }
-        
+
+        # FALLBACK: buscar en CSV locales si no está en la BD
+        possible_paths = [
+            'estudiantes_data.csv',
+            os.path.join('data', 'estudiantes_data.csv'),
+            os.path.join(os.path.dirname(__file__), 'estudiantes_data.csv'),
+            os.path.join(os.path.dirname(__file__), 'data', 'estudiantes_data.csv'),
+        ]
+        for p in possible_paths:
+            try:
+                if os.path.exists(p):
+                    df_csv = pd.read_csv(p, dtype=str).fillna('')
+                    # Buscar por código exacto
+                    matched = df_csv[df_csv.apply(lambda r: str(r.get('codigo','')).strip() == str(codigo).strip() , axis=1)]
+                    if matched.shape[0] > 0:
+                        row = matched.iloc[0].to_dict()
+                        # Construir respuesta similar a la que devuelve la BD
+                        student_dict = {
+                            'codigo': row.get('codigo', codigo),
+                            'nombre': row.get('nombre', row.get('Nombre', 'Sin nombre')),
+                            'carrera': row.get('carrera', row.get('Carrera', None)),
+                            'ciclo': int(row.get('ciclo', row.get('Ciclo', 0))) if str(row.get('ciclo','')).isdigit() else None,
+                            # incluir otras columnas si existen
+                            'promedio_ponderado': float(row.get('Promedio_ponderado', row.get('promedio_ponderado', 0)) or 0),
+                            'sueno_horas': row.get('sueno_horas', ''),
+                            'asistencia_porcentaje': float(row.get('Asistencia', row.get('asistencia_porcentaje', 0)) or 0)
+                        }
+                        return {
+                            'success': True,
+                            'student': student_dict,
+                            'prediction': {
+                                'risk_label': row.get('riesgo_predicho', 'No disponible'),
+                                'cluster_name': row.get('cluster_asignado', 'No asignado'),
+                                'risk_probability': float(row.get('probabilidad_desercion', 0) or 0)
+                            },
+                            'resumen_academico': {
+                                'promedio_ponderado': student_dict.get('promedio_ponderado', 0),
+                                'creditos_cursados': int(row.get('Creditos_matriculados', 44) or 44),
+                                'asistencia_ultimas_4_semanas': f"{int(student_dict.get('asistencia_porcentaje', 0))}%"
+                            }
+                        }
+            except Exception as e:
+                # continuar con siguiente path si algún CSV tiene formato distinto
+                print(f"⚠️ Error leyendo CSV fallback {p}: {e}")
+                continue
+
+        # Si no se encontró en BD ni en CSV -> 404
+        return JSONResponse(
+            status_code=404,
+            content={'success': False, 'message': 'Estudiante no encontrado'}
+        )
+
     except Exception as e:
         print(f"❌ Error al obtener estudiante: {e}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={'success': False, 'message': str(e)}
@@ -609,6 +657,19 @@ async def register_student(request: Request):
                 'message': 'Error interno al registrar estudiante',
                 'detail': str(e)
             }
+        )
+
+
+@app.get("/perfil", response_class=HTMLResponse)
+async def perfil_v2_query():
+    """Servir la página de perfil (soporta ?codigo=... para compatibilidad con panel/registro)"""
+    try:
+        with open('frontend/perfil.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Error: No se encontró el archivo perfil.html</h1>",
+            status_code=404
         )
 
 

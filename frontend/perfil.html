@@ -318,7 +318,7 @@
 
         .factor-protector {
             background: rgba(16, 185, 129, 0.1);
-            color: var(--accent-green);
+            color: var (--accent-green);
         }
 
         .recommendation-card {
@@ -677,14 +677,43 @@
             ? 'http://localhost:8000'  // Flask backend
             : '';  // Mismo origen en producción
 
+        // Obtener código del estudiante desde path o query param
+        function getStudentCodeFromUrl() {
+            // 1) Intentar extraer último segmento del path si no es 'perfil' ni vacío
+            const pathParts = window.location.pathname.split('/').filter(Boolean); // elimina '' entries
+            if (pathParts.length > 0) {
+                const last = pathParts[pathParts.length - 1];
+                // Si el path es algo distinto a 'perfil' asumimos que es el código
+                if (last && last.toLowerCase() !== 'perfil') {
+                    return decodeURIComponent(last);
+                }
+            }
+            // 2) Fallback: revisar query string ?codigo=...
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('codigo')) {
+                return params.get('codigo');
+            }
+            // 3) No encontrado
+            return null;
+        }
+
         // Cargar datos del estudiante
         async function loadStudentProfile() {
             try {
-                // Obtener código del estudiante desde la URL
-                const pathParts = window.location.pathname.split('/');
-                const codigo = pathParts[pathParts.length - 1];
+                // Obtener código del estudiante desde la URL (path o ?codigo=)
+                const codigo = getStudentCodeFromUrl();
+                if (!codigo) {
+                    console.warn('No se proporcionó código de estudiante en la URL.');
+                    // Mostrar mensaje simple o redirigir al panel
+                    document.getElementById('profileName').textContent = 'Estudiante no especificado';
+                    return;
+                }
 
-                const response = await fetch(`${API_BASE_URL}/api/students/${codigo}`);
+                const response = await fetch(`${API_BASE_URL}/api/students/${encodeURIComponent(codigo)}`);
+                if (!response.ok) {
+                    console.error('Error al solicitar perfil:', response.status, await response.text());
+                    return;
+                }
                 const data = await response.json();
 
                 if (data.student) {
