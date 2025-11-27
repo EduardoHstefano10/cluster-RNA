@@ -16,6 +16,7 @@ import json
 import os
 
 from ml_models import StudentRiskPredictor
+from database import EstudiantesDB
 
 # Inicializar FastAPI
 app = FastAPI(
@@ -33,18 +34,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Inicializar base de datos (intentar PostgreSQL, fallback a memoria)
+try:
+    db = EstudiantesDB()
+    print("✅ Conexión a PostgreSQL establecida")
+    USE_DATABASE = True
+except Exception as e:
+    print(f"⚠️  No se pudo conectar a PostgreSQL: {e}")
+    print("⚠️  Usando almacenamiento en memoria")
+    db = None
+    USE_DATABASE = False
+
 # Cargar o entrenar modelo
 predictor = StudentRiskPredictor()
 if os.path.exists('models/neural_network.pkl'):
     predictor.load_model()
-    print("Modelo cargado exitosamente")
+    print("✅ Modelo de predicción cargado exitosamente")
 else:
-    print("Entrenando nuevo modelo...")
-    predictor.train('estudiantes_data.csv')
+    print("🔄 Entrenando nuevo modelo...")
+    predictor.train('data/estudiantes_data.csv')
     predictor.save_model()
+    print("✅ Modelo entrenado y guardado")
 
 # Cargar datos de estudiantes
-df_students = pd.read_csv('estudiantes_data.csv')
+csv_path = 'data/estudiantes_data.csv' if os.path.exists('data/estudiantes_data.csv') else 'estudiantes_data.csv'
+df_students = pd.read_csv(csv_path)
 
 
 # ==================== MODELOS PYDANTIC ====================
@@ -258,7 +272,7 @@ async def predict_student_risk(student: StudentData):
 @app.post("/api/students/register")
 async def register_student(profile: StudentProfile):
     """
-    Registrar nuevo estudiante y generar predicción
+    Registrar nuevo estudiante y generar predicción automáticamente
     """
     try:
         # Generar ID único
@@ -267,21 +281,94 @@ async def register_student(profile: StudentProfile):
         # Agregar timestamp
         profile.ultima_actualizacion = datetime.now().isoformat()
 
-        # Guardar en BD
-        students_db[student_id] = profile
-
         # Generar predicción
         prediction = await predict_student_risk(profile.datos)
-        predictions_db[student_id] = prediction
+
+        # Si usamos PostgreSQL, guardar en la base de datos
+        if USE_DATABASE and db:
+            try:
+                # Preparar datos del estudiante para PostgreSQL
+                student_data_dict = profile.model_dump()
+                student_data_dict['riesgo_predicho'] = prediction.risk_label
+                student_data_dict['cluster_asignado'] = prediction.cluster
+                student_data_dict['probabilidad_desercion'] = prediction.desertion_probability
+
+                # Convertir datos numéricos a formato de base de datos
+                datos_dict = student_data_dict['datos']
+                student_db_data = {
+                    'codigo': profile.codigo,
+                    'nombre': profile.nombre,
+                    'carrera': profile.carrera,
+                    'ciclo': profile.ciclo,
+                    'edad': int(datos_dict.get('Edad', 20)),
+                    'promedio_ponderado': float(datos_dict.get('Promedio_ponderado', 0)),
+                    'creditos_matriculados': int(datos_dict.get('Creditos_matriculados', 0)),
+                    'porcentaje_creditos_aprobados': float(datos_dict.get('Porcentaje_creditos_aprobados', 0)),
+                    'cursos_desaprobados': int(datos_dict.get('Cursos_desaprobados', 0)),
+                    'asistencia_porcentaje': float(datos_dict.get('Asistencia', 0)),
+                    'retiros_cursos': int(datos_dict.get('Retiros_cursos', 0)),
+                    'horas_trabajo_semana': float(datos_dict.get('Horas_trabajo_semana', 0)),
+                    'anio_ingreso': int(datos_dict.get('Anio_ingreso', 2024)),
+                    'numero_ciclos_academicos': int(datos_dict.get('Numero_ciclos_academicos', 1)),
+                    'cursos_matriculados_ciclo': int(datos_dict.get('Cursos_matriculados_ciclo', 0)),
+                    'horas_estudio_semana': float(datos_dict.get('Horas_estudio_semana', 0)),
+                    'indice_regularidad': float(datos_dict.get('indice_regularidad', 0)),
+                    'intentos_aprobacion_curso': int(datos_dict.get('Intentos_aprobacion_curso', 1)),
+                    'nota_promedio': float(datos_dict.get('Nota_promedio', 0)),
+                    'notas_tutor': '',
+                    # Variables categóricas - valores por defecto
+                    'sueno_horas': 'Entre_6_8h',
+                    'actividad_fisica': 'Moderado',
+                    'alimentacion': 'Moderada',
+                    'estilo_de_vida': 'Moderado',
+                    'estres_academico': 'Moderado',
+                    'apoyo_familiar': 'Moderado',
+                    'bienestar': 'Moderado',
+                    'asistencia': 'Frecuente',
+                    'horas_estudio': 'De_1_3h',
+                    'interes_academico': 'Regular',
+                    'rendimiento_academico': 'En_proceso',
+                    'historial_academico': 'Entre_11_15',
+                    'carga_laboral': 'No_trabaja',
+                    'beca': 'No_tiene',
+                    'deudor': 'Sin_deuda'
+                }
+
+                # Insertar estudiante en la base de datos
+                db.insert_student(student_db_data)
+
+                # Actualizar con la predicción
+                prediction_data = {
+                    'riesgo_predicho': prediction.risk_label,
+                    'cluster_asignado': prediction.cluster,
+                    'probabilidad_desercion': prediction.desertion_probability
+                }
+                db.update_prediction(profile.codigo, prediction_data)
+
+                print(f"✅ Estudiante {profile.nombre} guardado en PostgreSQL con predicción")
+
+            except Exception as db_error:
+                print(f"⚠️  Error al guardar en PostgreSQL: {db_error}")
+                # Continuar con almacenamiento en memoria
+                students_db[student_id] = profile
+                predictions_db[student_id] = prediction
+        else:
+            # Guardar en memoria
+            students_db[student_id] = profile
+            predictions_db[student_id] = prediction
 
         return {
             'status': 'success',
             'message': f'Estudiante {profile.nombre} registrado exitosamente',
             'student_id': student_id,
-            'prediction': prediction
+            'prediction': prediction.model_dump(),
+            'database_used': 'PostgreSQL' if USE_DATABASE else 'Memoria'
         }
 
     except Exception as e:
+        print(f"❌ Error al registrar estudiante: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al registrar: {str(e)}")
 
 
@@ -290,6 +377,82 @@ async def get_student_profile(codigo: str):
     """
     Obtener perfil completo de un estudiante
     """
+    # Buscar en PostgreSQL si está disponible
+    if USE_DATABASE and db:
+        try:
+            student_data = db.get_student_by_codigo(codigo)
+            if student_data:
+                # Construir diccionario para predicción
+                student_dict = {
+                    'Promedio_ponderado': float(student_data.get('promedio_ponderado', 14)),
+                    'Creditos_matriculados': float(student_data.get('creditos_matriculados', 20)),
+                    'Porcentaje_creditos_aprobados': float(student_data.get('porcentaje_creditos_aprobados', 75)),
+                    'Cursos_desaprobados': float(student_data.get('cursos_desaprobados', 0)),
+                    'Asistencia': float(student_data.get('asistencia_porcentaje', 85)),
+                    'Retiros_cursos': float(student_data.get('retiros_cursos', 0)),
+                    'Edad': float(student_data.get('edad', 20)),
+                    'Horas_trabajo_semana': float(student_data.get('horas_trabajo_semana', 0)),
+                    'Anio_ingreso': int(student_data.get('anio_ingreso', 2020)),
+                    'Numero_ciclos_academicos': float(student_data.get('numero_ciclos_academicos', 5)),
+                    'Cursos_matriculados_ciclo': float(student_data.get('cursos_matriculados_ciclo', 6)),
+                    'Horas_estudio_semana': float(student_data.get('horas_estudio_semana', 15)),
+                    'indice_regularidad': float(student_data.get('indice_regularidad', 65)),
+                    'Intentos_aprobacion_curso': float(student_data.get('intentos_aprobacion_curso', 1)),
+                    'Nota_promedio': float(student_data.get('nota_promedio', 14))
+                }
+
+                # Si ya tiene predicción guardada, usarla, sino generar nueva
+                if student_data.get('riesgo_predicho'):
+                    # Usar predicción guardada
+                    prediction = {
+                        'risk_label': student_data.get('riesgo_predicho'),
+                        'cluster': student_data.get('cluster_asignado', 0),
+                        'cluster_name': f"C{student_data.get('cluster_asignado', 0)} - Cluster",
+                        'desertion_probability': float(student_data.get('probabilidad_desercion', 0)),
+                        'risk_level': 0,  # Calcular desde label
+                        'risk_probability': 0.0
+                    }
+                else:
+                    # Generar nueva predicción
+                    prediction = predictor.predict_risk(student_dict)
+
+                return {
+                    'student': {
+                        'codigo': student_data.get('codigo'),
+                        'nombre': student_data.get('nombre'),
+                        'carrera': student_data.get('carrera'),
+                        'ciclo': student_data.get('ciclo'),
+                        'edad': student_data.get('edad'),
+                        'datos': student_dict
+                    },
+                    'prediction': {
+                        **prediction,
+                        'recommendations': generate_recommendations(
+                            prediction.get('risk_level', 0),
+                            student_dict,
+                            prediction.get('cluster', 0)
+                        ),
+                        'key_factors': identify_key_factors(student_dict, prediction.get('risk_level', 0))
+                    },
+                    'resumen_academico': {
+                        'promedio_ponderado': round(student_dict['Promedio_ponderado'], 1),
+                        'creditos_cursados': int(student_dict['Creditos_matriculados'] * 2.2),
+                        'asistencia_ultimas_4_semanas': f"{int(student_dict['Asistencia'])}%",
+                        'horas_estudio_promedio': round(student_dict['Horas_estudio_semana'] / 7, 1)
+                    },
+                    'datos_basicos': {
+                        'edad': f"{int(student_dict['Edad'])} años",
+                        'carga_laboral': f"{'Parcial' if student_dict['Horas_trabajo_semana'] > 0 else 'No trabaja'} - {int(student_dict['Horas_trabajo_semana'])} h/sem",
+                        'beca': student_data.get('beca', 'No_tiene').replace('_', ' '),
+                        'deudor': student_data.get('deudor', 'Sin_deuda').replace('_', ' '),
+                        'apoyo_familiar': student_data.get('apoyo_familiar', 'Moderado'),
+                        'modalidad': "Presencial"
+                    },
+                    'source': 'PostgreSQL'
+                }
+        except Exception as e:
+            print(f"⚠️  Error al obtener estudiante de PostgreSQL: {e}")
+
     # Buscar en la base de datos simulada
     if codigo in students_db:
         student = students_db[codigo]
@@ -298,7 +461,8 @@ async def get_student_profile(codigo: str):
         return {
             'student': student,
             'prediction': prediction,
-            'last_update': student.ultima_actualizacion
+            'last_update': student.ultima_actualizacion,
+            'source': 'Memoria'
         }
 
     # Si no existe, generar uno de ejemplo
