@@ -17,20 +17,31 @@ class DatabaseConnection:
     """Gestor de conexión a PostgreSQL"""
 
     def __init__(self):
-        self.config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': int(os.getenv('DB_PORT', 5432)),
-            'database': os.getenv('DB_NAME', 'estudiantes_db'),
-            'user': os.getenv('DB_USER', 'cluster_user'),
-            'password': os.getenv('DB_PASSWORD', 'cluster_pass_2024')
-        }
+        # Soportar DATABASE_URL (Railway) o variables individuales
+        self.database_url = os.getenv('DATABASE_URL') or os.getenv('DATABASE_PUBLIC_URL')
+
+        if not self.database_url:
+            self.config = {
+                'host': os.getenv('PGHOST', os.getenv('DB_HOST', 'localhost')),
+                'port': int(os.getenv('PGPORT', os.getenv('DB_PORT', 5432))),
+                'database': os.getenv('PGDATABASE', os.getenv('DB_NAME', 'railway')),
+                'user': os.getenv('PGUSER', os.getenv('DB_USER', 'postgres')),
+                'password': os.getenv('PGPASSWORD', os.getenv('DB_PASSWORD', ''))
+            }
+        else:
+            self.config = None
+
         self.conn = None
         self.cursor = None
 
     def connect(self):
         """Establecer conexión a la base de datos"""
         try:
-            self.conn = psycopg2.connect(**self.config)
+            if self.database_url:
+                self.conn = psycopg2.connect(self.database_url)
+            else:
+                self.conn = psycopg2.connect(**self.config)
+
             self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
             print("✅ Conexión a PostgreSQL establecida exitosamente")
             return True
