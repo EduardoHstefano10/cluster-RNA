@@ -173,6 +173,7 @@ async def get_all_students(
     riesgo: Optional[str] = None,
     cluster: Optional[int] = None,
     estado: Optional[str] = None,
+    busqueda: Optional[str] = None,
     limit: int = 10,
     offset: int = 0
 ):
@@ -209,6 +210,14 @@ async def get_all_students(
                 if not student_dict.get('estado_seguimiento'):
                     continue
                 if estado.lower() not in str(student_dict['estado_seguimiento']).lower():
+                    continue
+
+            # Filtro de búsqueda por nombre o código
+            if busqueda:
+                busqueda_lower = busqueda.lower()
+                nombre = str(student_dict.get('nombre', '')).lower()
+                codigo = str(student_dict.get('codigo', '')).lower()
+                if busqueda_lower not in nombre and busqueda_lower not in codigo:
                     continue
 
             student_info = {
