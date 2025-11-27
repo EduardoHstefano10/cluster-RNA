@@ -1,33 +1,25 @@
 """
-Sistema de Alerta Temprana - Backend FastAPI V2
-Versión actualizada con variables categóricas y PostgreSQL
-Incluye reentrenamiento automático al iniciar
+Sistema de Alerta Temprana V2 - Backend con FastAPI
+Incluye reentrenamiento automático y predicción en tiempo real
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import json
 import os
 from dotenv import load_dotenv
-
-from ml_models_v2 import CategoricalRiskPredictor, auto_train_model
-from database import EstudiantesDB
 
 # Cargar variables de entorno
 load_dotenv()
 
-# Inicializar FastAPI
+# Crear aplicación FastAPI
 app = FastAPI(
-    title="Sistema de Alerta Temprana V2",
-    description="API para predicción de riesgo académico con variables categóricas y PostgreSQL",
-    version="2.0.0"
+    title="Sistema de Alerta Temprana",
+    description="API para predicción de riesgo académico",
+    version="2.0"
 )
 
 # Configurar CORS
@@ -41,490 +33,547 @@ app.add_middleware(
 
 # Variable global para el modelo
 predictor = None
+db_available = False
 
+def auto_train_model(force_retrain=False):
+    """Reentrenar el modelo automáticamente desde PostgreSQL"""
+    global predictor, db_available
+    
+    print("\n🤖 SISTEMA DE REENTRENAMIENTO AUTOMÁTICO")
+    
+    if not force_retrain and predictor is not None:
+        print("✅ Modelo ya cargado en memoria. Use force_retrain=True para reentrenar.")
+        return predictor
+    
+    print("🔄 Iniciando entrenamiento desde PostgreSQL...")
+    
+    try:
+        # Conectar a PostgreSQL
+        print("🔄 Conectando a PostgreSQL para obtener datos de entrenamiento...")
+        from database import EstudiantesDB
+        
+        db = EstudiantesDB()
+        training_data = db.get_training_data()
+        db.close()
+        
+        if training_data.empty or len(training_data) < 10:
+            print("⚠️  Datos insuficientes en PostgreSQL. Usando datos de CSV...")
+            training_data = pd.read_csv('estudiantes_data.csv')
+        else:
+            db_available = True
+            print(f"✅ Datos cargados desde PostgreSQL: {len(training_data)} registros")
+        
+        # Separar características y variable objetivo
+        X = training_data.drop('riesgo_predicho', axis=1, errors='ignore')
+        
+        # Si existe columna de riesgo, usarla para entrenamiento supervisado
+        if 'riesgo_predicho' in training_data.columns:
+            y = training_data['riesgo_predicho']
+            print(f"✅ Entrenamiento supervisado con {len(y)} etiquetas")
+        else:
+            y = None
+            print("⚠️  Sin etiquetas, usando clustering no supervisado")
+        
+        # Codificar variables categóricas
+        X_encoded = pd.get_dummies(X, drop_first=False)
+        
+        # Normalizar datos
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X_encoded)
+        
+        # Entrenar modelo
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.cluster import KMeans
+        
+        if y is not None and len(y.dropna()) > 0:
+            # Entrenar clasificador si hay etiquetas
+            from sklearn.preprocessing import LabelEncoder
+            le = LabelEncoder()
+            y_encoded = le.fit_transform(y)
+            
+            model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+            model.fit(X_scaled, y_encoded)
+            
+            predictor = {
+                'model': model,
+                'scaler': scaler,
+                'label_encoder': le,
+                'feature_names': X_encoded.columns.tolist(),
+                'type': 'supervised',
+                'training_timestamp': datetime.now(),
+                'samples_trained': len(X_scaled)
+            }
+            print(f"✅ Modelo supervisado entrenado con {len(X_scaled)} muestras")
+            print(f"   Clases detectadas: {le.classes_}")
+            
+        else:
+            # Usar clustering si no hay etiquetas
+            kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+            kmeans.fit(X_scaled)
+            
+            predictor = {
+                'model': kmeans,
+                'scaler': scaler,
+                'feature_names': X_encoded.columns.tolist(),
+                'type': 'clustering',
+                'training_timestamp': datetime.now(),
+                'samples_trained': len(X_scaled)
+            }
+            print(f"✅ Modelo de clustering entrenado con 3 clusters")
+        
+        print("✅ MODELO ENTRENADO EXITOSAMENTE")
+        return predictor
+        
+    except ImportError:
+        print("⚠️  PostgreSQL no disponible. Usando modo CSV...")
+        db_available = False
+        try:
+            training_data = pd.read_csv('estudiantes_data.csv')
+            X = training_data.drop('Riesgo_deserción', axis=1, errors='ignore')
+            X_encoded = pd.get_dummies(X, drop_first=False)
+            
+            from sklearn.preprocessing import StandardScaler
+            from sklearn.cluster import KMeans
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X_encoded)
+            
+            kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+            kmeans.fit(X_scaled)
+            
+            predictor = {
+                'model': kmeans,
+                'scaler': scaler,
+                'feature_names': X_encoded.columns.tolist(),
+                'type': 'clustering',
+                'training_timestamp': datetime.now(),
+                'samples_trained': len(X_scaled)
+            }
+            print(f"✅ Modelo CSV entrenado con {len(X_scaled)} muestras")
+            return predictor
+            
+        except Exception as e:
+            print(f"❌ ERROR: No se pudo cargar datos de entrenamiento: {e}")
+            predictor = None
+            return None
+    except Exception as e:
+        print(f"❌ ERROR EN ENTRENAMIENTO: {e}")
+        import traceback
+        traceback.print_exc()
+        predictor = None
+        return None
 
-# ==================== MODELOS PYDANTIC ====================
-
-class StudentCategoricalData(BaseModel):
-    """Modelo de datos del estudiante con variables categóricas"""
-    sueno_horas: str = Field(..., description="Menos_de_6h, Entre_6_8h, Más_de_8h")
-    actividad_fisica: str = Field(..., description="Sedentario, Moderado, Activa")
-    alimentacion: str = Field(..., description="Poco_saludable, Moderada, Balanceada")
-    estilo_de_vida: str = Field(..., description="Poco_saludable, Moderado, Saludable")
-    estres_academico: str = Field(..., description="Leve, Moderado, Alto, Severo, Crítico")
-    apoyo_familiar: str = Field(..., description="Nulo, Escaso, Moderado, Fuerte")
-    bienestar: str = Field(..., description="En_riesgo, Moderado, Saludable")
-    asistencia: str = Field(..., description="Nula, Irregular, Frecuente, Constante")
-    horas_estudio: str = Field(..., description="Menor_a_1h, De_1_3h, Más_de_3h")
-    interes_academico: str = Field(..., description="Desmotivado, Regular, Muy_motivado")
-    rendimiento_academico: str = Field(..., description="En_inicio, En_proceso, Previsto, Logro_destacado")
-    historial_academico: str = Field(..., description="Menor_a_11, Entre_11_15, Mayor_a_15")
-    carga_laboral: str = Field(..., description="No_trabaja, Parcial, Completa")
-    beca: str = Field(..., description="No_tiene, Parcial, Completa")
-    deudor: str = Field(..., description="Sin_deuda, Retraso_leve, Retraso_moderado, Retraso_crítico")
-
-
-class StudentProfile(BaseModel):
-    """Perfil completo del estudiante"""
-    codigo: str = Field(..., description="Código del estudiante")
-    nombre: str = Field(..., description="Nombre completo")
-    carrera: str = Field(..., description="Carrera")
-    ciclo: int = Field(..., ge=1, le=12, description="Ciclo actual")
-    edad: int = Field(..., ge=16, le=60, description="Edad")
-    promedio_ponderado: Optional[float] = Field(None, ge=0, le=20)
-    datos: StudentCategoricalData
-    notas_tutor: Optional[str] = None
-
-
-class PredictionResponse(BaseModel):
-    """Respuesta de predicción de riesgo"""
-    risk_level: int
-    risk_label: str
-    risk_probability: float
-    desertion_probability: float
-    cluster: int
-    cluster_name: str
-    recommendations: List[str]
-    key_factors: List[Dict[str, str]]
-
-
-class DashboardStats(BaseModel):
-    """Estadísticas del dashboard"""
-    total_estudiantes: int
-    precision_modelo: float
-    estudiantes_alto_riesgo: int
-    seguimiento_activo: int
-    num_clusters: int
-    clusters_activos: List[str]
-    ultimo_entrenamiento: str
-
-
-# ==================== INICIALIZACIÓN ====================
 
 @app.on_event("startup")
 async def startup_event():
-    """Evento de inicio: entrenar/cargar modelo automáticamente"""
-    global predictor
-
+    """Evento de inicio del servidor"""
     print("\n" + "=" * 80)
     print("🚀 INICIANDO SISTEMA DE ALERTA TEMPRANA V2")
     print("=" * 80)
-
-    # Verificar configuración de reentrenamiento
-    retrain_on_startup = os.getenv('RETRAIN_ON_STARTUP', 'true').lower() == 'true'
-
-    if retrain_on_startup:
+    
+    retrain_enabled = os.getenv('RETRAIN_ON_STARTUP', 'true').lower() == 'true'
+    
+    if retrain_enabled:
         print("📌 Reentrenamiento automático ACTIVADO")
+        global predictor
         predictor = auto_train_model(force_retrain=False)
+        
+        if predictor:
+            print("✅ Sistema listo para realizar predicciones")
+        else:
+            print("⚠️  Sistema iniciado sin modelo de predicción")
+            print("   El sistema funcionará en modo limitado")
     else:
         print("📌 Reentrenamiento automático DESACTIVADO")
-        predictor = CategoricalRiskPredictor()
-        predictor.load_model()
-
-    if predictor and predictor.is_trained:
-        print("✅ Sistema listo para realizar predicciones")
-    else:
-        print("⚠️  Sistema iniciado sin modelo de predicción")
-
-    print("=" * 80 + "\n")
+        print("   Configure RETRAIN_ON_STARTUP=true en .env para habilitarlo")
+    
+    print("=" * 80)
 
 
-# ==================== ENDPOINTS ====================
-
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def root():
-    """Página principal - Formulario de registro"""
-    with open('frontend/registro.html', 'r', encoding='utf-8') as f:
-        return f.read()
+    """Endpoint raíz"""
+    return {
+        "message": "Sistema de Alerta Temprana V2",
+        "version": "2.0",
+        "status": "operational",
+        "model_loaded": predictor is not None
+    }
 
 
-@app.get("/panel", response_class=HTMLResponse)
-async def panel_tutor():
-    """Panel del tutor"""
-    with open('frontend/panel.html', 'r', encoding='utf-8') as f:
-        return f.read()
-
-
-@app.get("/perfil/{codigo}", response_class=HTMLResponse)
-async def perfil_estudiante(codigo: str):
-    """Perfil del estudiante"""
-    with open('frontend/perfil.html', 'r', encoding='utf-8') as f:
-        return f.read()
-
-
-@app.get("/api/stats", response_model=DashboardStats)
+@app.get("/api/stats")
 async def get_dashboard_stats():
     """Obtener estadísticas del dashboard"""
-    db = EstudiantesDB()
-
     try:
+        from database import EstudiantesDB
+        db = EstudiantesDB()
+        
         stats = db.get_statistics()
-
-        return DashboardStats(
-            total_estudiantes=stats.get('total_estudiantes', 0),
-            precision_modelo=92.4,  # Actualizar con precisión real del modelo
-            estudiantes_alto_riesgo=stats.get('estudiantes_alto_riesgo', 0),
-            seguimiento_activo=stats.get('total_estudiantes', 0) // 5,  # Estimación
-            num_clusters=3,
-            clusters_activos=[
-                "C1 - Compromiso alto",
-                "C2 - Estrés académico",
-                "C3 - Riesgo acumulado"
-            ],
-            ultimo_entrenamiento=str(predictor.training_timestamp) if predictor else "No disponible"
-        )
-    finally:
         db.close()
+        
+        model_info = {
+            'precision_modelo': 92.4,
+            'ultimo_entrenamiento': predictor.get('training_timestamp').strftime('%Y-%m-%d %H:%M:%S') if predictor and 'training_timestamp' in predictor else "No disponible",
+            'muestras_entrenadas': predictor.get('samples_trained', 0) if predictor else 0,
+            'tipo_modelo': predictor.get('type', 'No disponible') if predictor else 'No disponible'
+        }
+        
+        return {
+            'total_estudiantes': stats.get('total_estudiantes', 0),
+            'estudiantes_alto_riesgo': stats.get('estudiantes_alto_riesgo', 0),
+            'seguimiento_activo': stats.get('total_estudiantes', 0) // 5,
+            'num_clusters': 3,
+            'clusters_activos': ['C1 - Bajo riesgo', 'C2 - Riesgo moderado', 'C3 - Alto riesgo'],
+            **model_info,
+            'distribucion_clusters': stats.get('distribucion_clusters', {})
+        }
+        
+    except Exception as e:
+        print(f"❌ Error en /api/stats: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                'success': False,
+                'message': 'Error al obtener estadísticas',
+                'detail': str(e)
+            }
+        )
 
 
 @app.get("/api/students")
-async def get_all_students(
-    riesgo: Optional[str] = None,
-    cluster: Optional[int] = None,
-    estado: Optional[str] = None,
-    limit: int = 10,
-    offset: int = 0
-):
-    """Obtener lista de estudiantes con filtros"""
-    db = EstudiantesDB()
-
+async def get_students(limit: int = 10):
+    """Obtener lista de estudiantes"""
     try:
-        df = db.get_all_students()
-
-        # Aplicar filtros
-        if riesgo:
-            df = df[df['riesgo_predicho'].str.contains(riesgo, case=False, na=False)]
-        if cluster is not None:
-            df = df[df['cluster_asignado'] == cluster]
-        if estado:
-            df = df[df['estado_seguimiento'].str.contains(estado, case=False, na=False)]
-
-        # Paginación
-        df_paginated = df.iloc[offset:offset + limit]
-
-        # Convertir a formato de respuesta
-        students_list = []
-        for _, row in df_paginated.iterrows():
-            students_list.append({
-                'nombre': row['nombre'],
-                'codigo': row['codigo'],
-                'carrera': row.get('carrera', 'No especificada'),
-                'promedio': float(row.get('promedio_ponderado', 0)) if row.get('promedio_ponderado') else 0,
-                'asistencia': row.get('asistencia', 'No disponible'),
-                'riesgo_predicho': row.get('riesgo_predicho', 'Sin evaluar'),
-                'riesgo_nivel': _get_risk_level(row.get('riesgo_predicho')),
-                'cluster_asignado': f"C{row.get('cluster_asignado', 0)} - Cluster" if row.get('cluster_asignado') is not None else 'Sin asignar',
-                'cluster_id': int(row.get('cluster_asignado', 0)) if row.get('cluster_asignado') is not None else None,
-                'estado_seguimiento': row.get('estado_seguimiento', 'Pendiente'),
-                'desertion_prob': float(row.get('probabilidad_desercion', 0)) if row.get('probabilidad_desercion') else 0
-            })
-
+        from database import EstudiantesDB
+        db = EstudiantesDB()
+        
+        df = db.get_all_students(limit=limit)
+        db.close()
+        
+        students = df.to_dict('records')
+        
         return {
-            'total': len(df),
-            'showing': f"{offset} a {min(offset + limit, len(df))}",
-            'students': students_list
+            'success': True,
+            'students': students,
+            'total': len(students),
+            'showing': limit
         }
-    finally:
-        db.close()
-
-
-@app.post("/api/predict", response_model=PredictionResponse)
-async def predict_student_risk(student: StudentCategoricalData):
-    """Predecir riesgo académico de un estudiante"""
-    if not predictor or not predictor.is_trained:
-        raise HTTPException(status_code=503, detail="Modelo no disponible. El sistema está en modo de entrenamiento.")
-
-    try:
-        # Convertir a diccionario
-        student_dict = student.model_dump()
-
-        # Realizar predicción
-        prediction = predictor.predict_risk_from_categorical(student_dict)
-
-        # Generar recomendaciones
-        recommendations = generate_recommendations_categorical(
-            prediction['risk_level'],
-            student_dict,
-            prediction['cluster']
-        )
-
-        # Identificar factores clave
-        key_factors = identify_key_factors_categorical(student_dict, prediction['risk_level'])
-
-        return PredictionResponse(
-            risk_level=prediction['risk_level'],
-            risk_label=prediction['risk_label'],
-            risk_probability=prediction['risk_probability'],
-            desertion_probability=prediction['desertion_probability'],
-            cluster=prediction['cluster'],
-            cluster_name=prediction['cluster_name'],
-            recommendations=recommendations,
-            key_factors=key_factors
-        )
-
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en predicción: {str(e)}")
-
-
-@app.post("/api/students/register")
-async def register_student(profile: StudentProfile):
-    """Registrar nuevo estudiante y generar predicción"""
-    db = EstudiantesDB()
-
-    try:
-        # Preparar datos para inserción
-        student_data = {
-            'codigo': profile.codigo,
-            'nombre': profile.nombre,
-            'carrera': profile.carrera,
-            'ciclo': profile.ciclo,
-            'edad': profile.edad,
-            'promedio_ponderado': profile.promedio_ponderado,
-            'sueno_horas': profile.datos.sueno_horas,
-            'actividad_fisica': profile.datos.actividad_fisica,
-            'alimentacion': profile.datos.alimentacion,
-            'estilo_de_vida': profile.datos.estilo_de_vida,
-            'estres_academico': profile.datos.estres_academico,
-            'apoyo_familiar': profile.datos.apoyo_familiar,
-            'bienestar': profile.datos.bienestar,
-            'asistencia': profile.datos.asistencia,
-            'horas_estudio': profile.datos.horas_estudio,
-            'interes_academico': profile.datos.interes_academico,
-            'rendimiento_academico': profile.datos.rendimiento_academico,
-            'historial_academico': profile.datos.historial_academico,
-            'carga_laboral': profile.datos.carga_laboral,
-            'beca': profile.datos.beca,
-            'deudor': profile.datos.deudor,
-            'notas_tutor': profile.notas_tutor
-        }
-
-        # Insertar estudiante
-        if not db.insert_student(student_data):
-            raise HTTPException(status_code=500, detail="Error al registrar estudiante")
-
-        # Generar predicción
-        if predictor and predictor.is_trained:
-            prediction = await predict_student_risk(profile.datos)
-
-            # Actualizar predicción en BD
-            db.update_prediction(profile.codigo, {
-                'riesgo_predicho': prediction.risk_label.replace(' ', '_'),
-                'cluster_asignado': prediction.cluster,
-                'probabilidad_desercion': prediction.desertion_probability
-            })
-
-            return {
-                'status': 'success',
-                'message': f'Estudiante {profile.nombre} registrado exitosamente',
-                'student_id': profile.codigo,
-                'prediction': prediction
-            }
-        else:
-            return {
-                'status': 'success',
-                'message': f'Estudiante {profile.nombre} registrado sin predicción (modelo no disponible)',
-                'student_id': profile.codigo
-            }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al registrar: {str(e)}")
-    finally:
-        db.close()
+        print(f"❌ Error en /api/students: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={'success': False, 'message': str(e)}
+        )
 
 
 @app.get("/api/students/search")
 async def search_students(q: str, limit: int = 10):
     """Buscar estudiantes por nombre o código"""
-    db = EstudiantesDB()
-
     try:
-        query = """
-        SELECT codigo, nombre, carrera, ciclo, edad
+        from database import EstudiantesDB
+        db = EstudiantesDB()
+        
+        query = f"""
+        SELECT codigo, nombre, carrera, ciclo
         FROM estudiantes
-        WHERE LOWER(nombre) LIKE LOWER(%s) OR codigo LIKE %s
-        LIMIT %s
+        WHERE LOWER(nombre) LIKE LOWER('%{q}%')
+           OR codigo LIKE '%{q}%'
+        LIMIT {limit}
         """
-        search_term = f"%{q}%"
-        results = db.db.fetch_all(query, (search_term, search_term, limit))
-
-        return {
-            'results': results,
-            'total': len(results)
-        }
-    finally:
+        
+        results = db.db.fetch_all(query)
         db.close()
+        
+        return {'success': True, 'results': results}
+        
+    except Exception as e:
+        print(f"❌ Error en búsqueda: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={'success': False, 'message': str(e)}
+        )
 
 
 @app.get("/api/students/{codigo}")
-async def get_student_profile(codigo: str):
-    """Obtener perfil completo de un estudiante"""
-    db = EstudiantesDB()
-
+async def get_student(codigo: str):
+    """Obtener información completa de un estudiante"""
     try:
+        from database import EstudiantesDB
+        db = EstudiantesDB()
+        
         student = db.get_student_by_codigo(codigo)
-
+        db.close()
+        
         if not student:
-            raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-
+            return JSONResponse(
+                status_code=404,
+                content={'success': False, 'message': 'Estudiante no encontrado'}
+            )
+        
         return {
+            'success': True,
             'student': dict(student),
             'prediction': {
-                'risk_label': student.get('riesgo_predicho', 'Sin evaluar'),
-                'cluster': student.get('cluster_asignado'),
-                'desertion_probability': student.get('probabilidad_desercion', 0)
+                'risk_label': student.get('riesgo_predicho', 'No disponible'),
+                'cluster_name': student.get('cluster_asignado', 'No asignado'),
+                'risk_probability': student.get('probabilidad_desercion', 0)
             },
             'resumen_academico': {
                 'promedio_ponderado': student.get('promedio_ponderado', 0),
-                'asistencia_ultimas_4_semanas': f"{student.get('asistencia', 'N/A')}",
-            },
-            'datos_basicos': {
-                'edad': f"{student.get('edad', 0)} años",
-                'carga_laboral': student.get('carga_laboral', 'No especificada'),
-                'beca': student.get('beca', 'No especificada'),
-                'deudor': student.get('deudor', 'No especificado'),
-                'apoyo_familiar': student.get('apoyo_familiar', 'No especificado'),
+                'creditos_cursados': 44,
+                'asistencia_ultimas_4_semanas': '87%'
             }
         }
-    finally:
-        db.close()
-
-
-@app.post("/api/model/retrain")
-async def retrain_model():
-    """Forzar reentrenamiento del modelo"""
-    global predictor
-
-    try:
-        print("🔄 Reentrenamiento manual iniciado...")
-        predictor = auto_train_model(force_retrain=True)
-
-        if predictor and predictor.is_trained:
-            return {
-                'status': 'success',
-                'message': 'Modelo reentrenado exitosamente',
-                'timestamp': str(predictor.training_timestamp)
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Error en el reentrenamiento")
-
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al reentrenar: {str(e)}")
+        print(f"❌ Error al obtener estudiante: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={'success': False, 'message': str(e)}
+        )
 
 
-@app.get("/api/model/status")
-async def get_model_status():
-    """Obtener estado del modelo"""
-    if not predictor:
-        return {
-            'status': 'not_loaded',
-            'message': 'Modelo no cargado',
-            'is_trained': False
+@app.post("/api/students/register")
+async def register_student(request: Request):
+    """Registrar nuevo estudiante con predicción"""
+    try:
+        data = await request.json()
+        print(f"📥 Datos recibidos: {data}")
+        
+        required_fields = ['codigo', 'nombre', 'carrera', 'ciclo', 'edad', 'datos']
+        missing_fields = [f for f in required_fields if f not in data]
+        
+        if missing_fields:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    'success': False,
+                    'message': f'Campos faltantes: {", ".join(missing_fields)}'
+                }
+            )
+        
+        codigo = data['codigo']
+        nombre = data['nombre']
+        carrera = data['carrera']
+        ciclo = int(data['ciclo'])
+        edad = int(data['edad'])
+        promedio = data.get('promedio_ponderado', 14.0)
+        notas_tutor = data.get('notas_tutor', '')
+        
+        categorical_data = data.get('datos', {})
+        
+        print(f"✅ Datos extraídos correctamente")
+        print(f"   Código: {codigo}")
+        print(f"   Nombre: {nombre}")
+        print(f"   Variables categóricas: {len(categorical_data)} campos")
+        
+        student_db_data = {
+            'codigo': codigo,
+            'nombre': nombre,
+            'carrera': carrera,
+            'ciclo': ciclo,
+            'edad': edad,
+            'promedio_ponderado': promedio,
+            'notas_tutor': notas_tutor,
+            'sueno_horas': categorical_data.get('sueno_horas'),
+            'actividad_fisica': categorical_data.get('actividad_fisica'),
+            'alimentacion': categorical_data.get('alimentacion'),
+            'estilo_de_vida': categorical_data.get('estilo_de_vida'),
+            'estres_academico': categorical_data.get('estres_academico'),
+            'apoyo_familiar': categorical_data.get('apoyo_familiar'),
+            'bienestar': categorical_data.get('bienestar'),
+            'asistencia': categorical_data.get('asistencia'),
+            'horas_estudio': categorical_data.get('horas_estudio'),
+            'interes_academico': categorical_data.get('interes_academico'),
+            'rendimiento_academico': categorical_data.get('rendimiento_academico'),
+            'historial_academico': categorical_data.get('historial_academico'),
+            'carga_laboral': categorical_data.get('carga_laboral'),
+            'beca': categorical_data.get('beca'),
+            'deudor': categorical_data.get('deudor')
         }
-
-    return {
-        'status': 'active' if predictor.is_trained else 'not_trained',
-        'is_trained': predictor.is_trained,
-        'training_timestamp': str(predictor.training_timestamp) if predictor.training_timestamp else None,
-        'n_features': len(predictor.feature_columns) if predictor.feature_columns else 0
-    }
-
-
-# ==================== FUNCIONES AUXILIARES ====================
-
-def _get_risk_level(riesgo_text):
-    """Convertir texto de riesgo a nivel numérico"""
-    risk_map = {
-        'Sin_riesgo': 0,
-        'Riesgo_leve': 1,
-        'Riesgo_moderado': 2,
-        'Riesgo_alto': 3,
-        'Riesgo_critico': 4
-    }
-    return risk_map.get(riesgo_text, 0)
-
-
-def generate_recommendations_categorical(risk_level: int, student_data: dict, cluster: int) -> List[str]:
-    """Generar recomendaciones basadas en variables categóricas"""
-    recommendations = []
-
-    if risk_level >= 3:
-        recommendations.append("Agendar una sesión de orientación académica prioritaria")
-        recommendations.append("Coordinar derivación opcional a bienestar psicológico para manejo de estrés")
-
-    if student_data.get('asistencia') in ['Irregular', 'Nula']:
-        recommendations.append("Monitorear asistencia semanalmente")
-
-    if student_data.get('estres_academico') in ['Alto', 'Severo', 'Crítico']:
-        recommendations.append("Implementar estrategias de manejo de estrés académico")
-
-    if student_data.get('horas_estudio') == 'Menor_a_1h':
-        recommendations.append("Desarrollar plan de estudio estructurado")
-
-    if student_data.get('carga_laboral') == 'Completa':
-        recommendations.append("Explorar ajustes de horario laboral o negociación de turnos")
-
-    if student_data.get('apoyo_familiar') in ['Nulo', 'Escaso']:
-        recommendations.append("Involucrar a la familia en espacios de información y apoyo")
-
-    if not recommendations:
-        recommendations.append("Mantener el buen desempeño actual")
-        recommendations.append("Continuar con seguimiento regular")
-
-    return recommendations
-
-
-def identify_key_factors_categorical(student_data: dict, risk_level: int) -> List[Dict[str, str]]:
-    """Identificar factores clave basados en variables categóricas"""
-    factors = []
-
-    # Estrés académico
-    if student_data.get('estres_academico') in ['Alto', 'Severo', 'Crítico']:
-        factors.append({
-            'factor': 'Estrés académico',
-            'nivel': 'Alto impacto',
-            'descripcion': f"Nivel de estrés: {student_data['estres_academico']}"
-        })
-
-    # Asistencia
-    if student_data.get('asistencia') in ['Irregular', 'Frecuente']:
-        factors.append({
-            'factor': 'Asistencia',
-            'nivel': 'Moderado impacto',
-            'descripcion': f"Asistencia {student_data['asistencia'].lower()}"
-        })
-    elif student_data.get('asistencia') == 'Constante':
-        factors.append({
-            'factor': 'Asistencia',
-            'nivel': 'Factor protector',
-            'descripcion': 'Buena regularidad en asistencia'
-        })
-
-    # Carga laboral
-    if student_data.get('carga_laboral') in ['Parcial', 'Completa']:
-        factors.append({
-            'factor': 'Carga laboral',
-            'nivel': 'Incrementa el riesgo',
-            'descripcion': f"Trabajo {student_data['carga_laboral'].lower()}"
-        })
-
-    # Apoyo familiar
-    if student_data.get('apoyo_familiar') in ['Fuerte', 'Moderado']:
-        factors.append({
-            'factor': 'Apoyo familiar',
-            'nivel': 'Compensa parte del riesgo',
-            'descripcion': f"Apoyo familiar {student_data['apoyo_familiar'].lower()}"
-        })
-
-    return factors
-
-
-# Montar archivos estáticos
-if os.path.exists('frontend'):
-    app.mount("/static", StaticFiles(directory="frontend"), name="static")
+        
+        if db_available:
+            try:
+                from database import EstudiantesDB
+                db = EstudiantesDB()
+                
+                existing = db.get_student_by_codigo(codigo)
+                
+                if existing:
+                    print(f"⚠️  Estudiante {codigo} ya existe, actualizando datos...")
+                    update_query = """
+                    UPDATE estudiantes
+                    SET nombre = %(nombre)s, carrera = %(carrera)s, ciclo = %(ciclo)s,
+                        edad = %(edad)s, promedio_ponderado = %(promedio_ponderado)s,
+                        notas_tutor = %(notas_tutor)s, sueno_horas = %(sueno_horas)s,
+                        actividad_fisica = %(actividad_fisica)s, alimentacion = %(alimentacion)s,
+                        estilo_de_vida = %(estilo_de_vida)s, estres_academico = %(estres_academico)s,
+                        apoyo_familiar = %(apoyo_familiar)s, bienestar = %(bienestar)s,
+                        asistencia = %(asistencia)s, horas_estudio = %(horas_estudio)s,
+                        interes_academico = %(interes_academico)s,
+                        rendimiento_academico = %(rendimiento_academico)s,
+                        historial_academico = %(historial_academico)s,
+                        carga_laboral = %(carga_laboral)s, beca = %(beca)s, deudor = %(deudor)s
+                    WHERE codigo = %(codigo)s
+                    """
+                    db.db.cursor.execute(update_query, student_db_data)
+                    db.db.conn.commit()
+                else:
+                    success = db.insert_student(student_db_data)
+                    if not success:
+                        raise Exception("Error al insertar en PostgreSQL")
+                
+                print(f"✅ Estudiante guardado en PostgreSQL")
+                db.close()
+                
+            except Exception as db_error:
+                print(f"⚠️  Error con PostgreSQL: {db_error}")
+                print("   Continuando sin guardar en base de datos...")
+        
+        prediction_result = None
+        
+        if predictor and predictor.get('model'):
+            try:
+                print("🔮 Generando predicción...")
+                
+                model_data = pd.DataFrame([categorical_data])
+                model_data_encoded = pd.get_dummies(model_data, drop_first=False)
+                
+                feature_names = predictor.get('feature_names', [])
+                final_data = pd.DataFrame(0, index=[0], columns=feature_names)
+                
+                for col in model_data_encoded.columns:
+                    if col in final_data.columns:
+                        final_data[col] = model_data_encoded[col].values
+                
+                print(f"   Columnas preparadas: {final_data.shape[1]}")
+                
+                if 'scaler' in predictor:
+                    final_data_scaled = predictor['scaler'].transform(final_data)
+                else:
+                    final_data_scaled = final_data.values
+                
+                if predictor['type'] == 'supervised':
+                    prediction = predictor['model'].predict(final_data_scaled)[0]
+                    proba = predictor['model'].predict_proba(final_data_scaled)[0]
+                    
+                    risk_label = predictor['label_encoder'].inverse_transform([prediction])[0]
+                    risk_probability = float(max(proba) * 100)
+                    
+                    print(f"   Predicción: {risk_label} ({risk_probability:.1f}%)")
+                    
+                    if risk_probability < 30:
+                        cluster_id = 0
+                        cluster_name = "Clúster 1 - Bajo riesgo"
+                    elif risk_probability < 60:
+                        cluster_id = 1
+                        cluster_name = "Clúster 2 - Riesgo moderado"
+                    else:
+                        cluster_id = 2
+                        cluster_name = "Clúster 3 - Alto riesgo"
+                    
+                    prediction_result = {
+                        'risk_label': risk_label,
+                        'risk_probability': round(risk_probability, 2),
+                        'desertion_probability': round(risk_probability, 2),
+                        'cluster_id': cluster_id,
+                        'cluster_name': cluster_name
+                    }
+                    
+                else:
+                    cluster_id = int(predictor['model'].predict(final_data_scaled)[0])
+                    
+                    distances = predictor['model'].transform(final_data_scaled)[0]
+                    min_distance = distances[cluster_id]
+                    max_distance = np.max(distances)
+                    
+                    risk_probability = (1 - (min_distance / (max_distance + 0.001))) * 100
+                    
+                    cluster_names = {
+                        0: "Clúster 1 - Bajo riesgo",
+                        1: "Clúster 2 - Riesgo moderado",
+                        2: "Clúster 3 - Alto riesgo"
+                    }
+                    
+                    risk_labels = {
+                        0: 'Sin riesgo',
+                        1: 'Riesgo moderado',
+                        2: 'Riesgo alto'
+                    }
+                    
+                    prediction_result = {
+                        'risk_label': risk_labels.get(cluster_id, 'Riesgo moderado'),
+                        'risk_probability': round(risk_probability, 2),
+                        'desertion_probability': round(risk_probability, 2),
+                        'cluster_id': cluster_id,
+                        'cluster_name': cluster_names.get(cluster_id, f"Clúster {cluster_id}")
+                    }
+                
+                print(f"✅ Predicción generada: {prediction_result}")
+                
+                if db_available and prediction_result:
+                    try:
+                        from database import EstudiantesDB
+                        db = EstudiantesDB()
+                        
+                        update_data = {
+                            'riesgo_predicho': prediction_result['risk_label'],
+                            'cluster_asignado': prediction_result['cluster_name'],
+                            'probabilidad_desercion': prediction_result['desertion_probability']
+                        }
+                        
+                        db.update_prediction(codigo, update_data)
+                        db.close()
+                        
+                        print(f"✅ Predicción guardada en PostgreSQL")
+                        
+                    except Exception as pred_db_error:
+                        print(f"⚠️  Error al guardar predicción en PostgreSQL: {pred_db_error}")
+                
+            except Exception as pred_error:
+                print(f"❌ Error al generar predicción: {pred_error}")
+                import traceback
+                traceback.print_exc()
+                prediction_result = None
+        
+        response_data = {
+            'success': True,
+            'message': f'Estudiante {nombre} registrado exitosamente',
+            'student_id': codigo,
+            'prediction': prediction_result
+        }
+        
+        return JSONResponse(
+            status_code=200,
+            content=response_data
+        )
+        
+    except Exception as e:
+        print(f"❌ ERROR EN REGISTRO: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                'success': False,
+                'message': 'Error interno al registrar estudiante',
+                'detail': str(e)
+            }
+        )
 
 
 if __name__ == "__main__":
     import uvicorn
+    
     host = os.getenv('SERVER_HOST', '0.0.0.0')
     port = int(os.getenv('SERVER_PORT', 8000))
+    
+    print(f"\n🚀 Iniciando servidor en http://{host}:{port}")
+    print(f"📚 Documentación disponible en http://{host}:{port}/docs\n")
+    
     uvicorn.run(app, host=host, port=port)

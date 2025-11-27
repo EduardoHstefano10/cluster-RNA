@@ -483,10 +483,17 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Configurar URL base según el entorno
-        const API_BASE_URL = window.location.hostname === 'localhost' && window.location.port === '5500'
-            ? 'http://localhost:8000'  // Flask backend
-            : '';  // Mismo origen en producción
+        // Configurar URL base automáticamente
+        const API_BASE_URL = (() => {
+            const hostname = window.location.hostname;
+            const port = window.location.port;
+            if (port === '5500' || hostname === '127.0.0.1') {
+                return 'http://localhost:8000';
+            }
+            return '';
+        })();
+
+        console.log('🔧 API Base URL:', API_BASE_URL);
 
         // Manejar filtros
         document.querySelectorAll('.btn-filter').forEach(button => {
@@ -512,66 +519,95 @@
             loadStudents();
         });
 
-        // Cargar estudiantes
+        // Cargar estudiantes con manejo robusto
         async function loadStudents() {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/students?limit=10`);
-                const data = await response.json();
+                console.log('📡 Cargando estudiantes desde:', `${API_BASE_URL}/api/students?limit=10`);
+                
+                const response = await fetch(`${API_BASE_URL}/api/students?limit=10`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    mode: 'cors'
+                });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('✅ Datos recibidos:', data);
+                
                 const tbody = document.getElementById('studentsTableBody');
                 tbody.innerHTML = '';
 
                 if (data.students && data.students.length > 0) {
-                    data.students.forEach(student => {
+                    data.students.forEach((student, index) => {
+                        console.log(`📋 Estudiante ${index + 1}:`, student);
                         const row = createStudentRow(student);
                         tbody.innerHTML += row;
                     });
+                    
+                    // Actualizar contador
+                    document.querySelector('.showing-count').textContent = 
+                        `Mostrando ${data.students.length} de ${data.total || data.students.length} estudiantes`;
                 } else {
                     tbody.innerHTML = `
                         <tr>
                             <td colspan="6" class="text-center" style="padding: 40px; color: var(--text-secondary);">
-                                No se encontraron estudiantes
+                                📭 No se encontraron estudiantes
                             </td>
                         </tr>
                     `;
                 }
             } catch (error) {
-                console.error('Error al cargar estudiantes:', error);
+                console.error('❌ Error al cargar estudiantes:', error);
                 document.getElementById('studentsTableBody').innerHTML = `
                     <tr>
                         <td colspan="6" class="text-center" style="padding: 40px; color: var(--text-secondary);">
-                            Error al cargar los datos
+                            ❌ Error al cargar datos: ${error.message}
+                            <br><small>Verifique que el backend esté corriendo en ${API_BASE_URL}</small>
                         </td>
                     </tr>
                 `;
             }
         }
 
-        // Crear fila de estudiante
+        // Crear fila de estudiante con valores por defecto
         function createStudentRow(student) {
-            const riskClass = getRiskClass(student.riesgo_predicho);
-            const estadoClass = getEstadoClass(student.estado_seguimiento);
+            // Valores por defecto seguros
+            const nombre = student.nombre || 'Sin nombre';
+            const codigo = student.codigo || 'N/A';
+            const carrera = student.carrera || 'Sin carrera';
+            const promedio = student.promedio_ponderado || student.promedio || 'N/A';
+            const riesgo = student.riesgo_predicho || 'Sin evaluar';
+            const cluster = student.cluster_asignado || 'Sin asignar';
+            const estado = student.estado_seguimiento || 'Pendiente';
+
+            const riskClass = getRiskClass(riesgo);
+            const estadoClass = getEstadoClass(estado);
+
+            console.log(`🔍 Procesando: ${nombre} - Riesgo: ${riesgo} (${riskClass})`);
 
             return `
                 <tr>
                     <td>
                         <div class="student-info">
-                            <span class="student-name">${student.nombre}</span>
-                            <span class="student-meta">ID ${student.codigo} · ${student.carrera}</span>
+                            <span class="student-name">${nombre}</span>
+                            <span class="student-meta">ID ${codigo} · ${carrera}</span>
                         </div>
                     </td>
-                    <td>${student.promedio} / 20</td>
+                    <td>${promedio} ${typeof promedio === 'number' ? '/ 20' : ''}</td>
                     <td>
-                        <span class="badge-risk ${riskClass}">${student.riesgo_predicho}</span>
+                        <span class="badge-risk ${riskClass}">${riesgo}</span>
                     </td>
                     <td>
-                        <span class="badge-cluster">${student.cluster_asignado}</span>
+                        <span class="badge-cluster">${cluster}</span>
                     </td>
                     <td>
-                        <span class="badge-estado ${estadoClass}">${student.estado_seguimiento}</span>
+                        <span class="badge-estado ${estadoClass}">${estado}</span>
                     </td>
                     <td>
-                        <button class="btn-action" onclick="viewProfile('${student.codigo}')" title="Ver perfil">
+                        <button class="btn-action" onclick="viewProfile('${codigo}')" title="Ver perfil">
                             <i class="bi bi-eye-fill"></i>
                         </button>
                     </td>
@@ -579,38 +615,107 @@
             `;
         }
 
-        // Obtener clase de riesgo
+        // Obtener clase de riesgo con manejo seguro de null
         function getRiskClass(riesgo) {
-            const riesgoLower = riesgo.toLowerCase();
-            if (riesgoLower.includes('sin riesgo')) return 'risk-sin';
-            if (riesgoLower.includes('leve')) return 'risk-leve';
-            if (riesgoLower.includes('moderado')) return 'risk-moderado';
-            if (riesgoLower.includes('alto')) return 'risk-alto';
-            if (riesgoLower.includes('crítico')) return 'risk-critico';
+            if (!riesgo || typeof riesgo !== 'string') {
+                console.warn('⚠️ Riesgo inválido:', riesgo);
+                return 'risk-sin';
+            }
+
+            const riesgoLower = riesgo.toLowerCase().trim();
+            
+            if (riesgoLower.includes('sin') || riesgoLower.includes('sin riesgo') || riesgoLower.includes('bajo')) {
+                return 'risk-sin';
+            }
+            if (riesgoLower.includes('leve') || riesgoLower.includes('ligero')) {
+                return 'risk-leve';
+            }
+            if (riesgoLower.includes('moderado') || riesgoLower.includes('medio')) {
+                return 'risk-moderado';
+            }
+            if (riesgoLower.includes('alto') || riesgoLower.includes('elevado')) {
+                return 'risk-alto';
+            }
+            if (riesgoLower.includes('crítico') || riesgoLower.includes('critico') || riesgoLower.includes('severo')) {
+                return 'risk-critico';
+            }
+            
+            // Por defecto, si no coincide con nada
+            console.warn('⚠️ Riesgo no reconocido:', riesgo);
             return 'risk-sin';
         }
 
-        // Obtener clase de estado
+        // Obtener clase de estado con manejo seguro
         function getEstadoClass(estado) {
-            const estadoLower = estado.toLowerCase();
-            if (estadoLower.includes('observación')) return 'estado-observacion';
-            if (estadoLower.includes('tutoría')) return 'estado-tutoria';
-            if (estadoLower.includes('pendiente')) return 'estado-pendiente';
+            if (!estado || typeof estado !== 'string') {
+                return 'estado-pendiente';
+            }
+
+            const estadoLower = estado.toLowerCase().trim();
+            
+            if (estadoLower.includes('observación') || estadoLower.includes('observacion')) {
+                return 'estado-observacion';
+            }
+            if (estadoLower.includes('tutoría') || estadoLower.includes('tutoria')) {
+                return 'estado-tutoria';
+            }
+            if (estadoLower.includes('pendiente')) {
+                return 'estado-pendiente';
+            }
+            
             return 'estado-pendiente';
         }
 
         // Ver perfil del estudiante
         function viewProfile(codigo) {
-            window.location.href = `/perfil/${codigo}`;
+            if (!codigo || codigo === 'N/A') {
+                alert('⚠️ Código de estudiante inválido');
+                return;
+            }
+            window.location.href = `/frontend/perfil.html?codigo=${codigo}`;
         }
 
         // Exportar listado
         document.querySelector('.btn-export').addEventListener('click', async function() {
-            window.open(`${API_BASE_URL}/api/export/students?formato=csv`, '_blank');
+            try {
+                const url = `${API_BASE_URL}/api/export/students?formato=csv`;
+                console.log('📥 Exportando desde:', url);
+                window.open(url, '_blank');
+            } catch (error) {
+                console.error('❌ Error al exportar:', error);
+                alert('Error al exportar listado');
+            }
         });
 
-        // Cargar estudiantes al inicio
-        loadStudents();
+        // Probar conexión al cargar
+        window.addEventListener('load', async () => {
+            console.log('🔍 Probando conexión con backend...');
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/stats`, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (response.ok) {
+                    const stats = await response.json();
+                    console.log('✅ Backend conectado. Estadísticas:', stats);
+                    
+                    // Actualizar estadísticas en la UI
+                    document.querySelector('.stat-card:nth-child(1) .stat-value').textContent = stats.total_estudiantes || '128';
+                    document.querySelector('.stat-card:nth-child(2) .stat-value').textContent = `${stats.precision_modelo || '92.4'}%`;
+                    document.querySelector('.stat-card:nth-child(3) .stat-value').innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> ${stats.estudiantes_alto_riesgo || '9'}`;
+                    document.querySelector('.stat-card:nth-child(4) .stat-value').textContent = stats.seguimiento_activo || '23';
+                } else {
+                    console.warn('⚠️ Backend responde con error:', response.status);
+                }
+            } catch (error) {
+                console.error('❌ No se pudo conectar al backend:', error.message);
+                console.warn('⚠️ El panel mostrará datos de ejemplo');
+            }
+            
+            // Cargar estudiantes
+            loadStudents();
+        });
     </script>
 </body>
 </html>

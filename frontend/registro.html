@@ -624,10 +624,21 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Configurar URL base según el entorno
-        const API_BASE_URL = window.location.hostname === 'localhost' && window.location.port === '5500'
-            ? 'http://localhost:8000'  // Flask backend
-            : '';  // Mismo origen en producción
+        // Configurar URL base - detectar automáticamente
+        const API_BASE_URL = (() => {
+            const hostname = window.location.hostname;
+            const port = window.location.port;
+            
+            // Si estamos en Live Server (puerto 5500)
+            if (port === '5500' || hostname === '127.0.0.1') {
+                return 'http://localhost:8000';
+            }
+            
+            // Si estamos en el mismo servidor que el backend
+            return '';
+        })();
+
+        console.log('🔧 API Base URL:', API_BASE_URL);
 
         // Variable global para el estudiante seleccionado
         let selectedStudent = null;
@@ -635,11 +646,9 @@
         // Manejar selección de botones de opción
         document.querySelectorAll('.btn-option').forEach(button => {
             button.addEventListener('click', function() {
-                // Remover active de hermanos
                 this.parentElement.querySelectorAll('.btn-option').forEach(btn => {
                     btn.classList.remove('active');
                 });
-                // Agregar active al clickeado
                 this.classList.add('active');
             });
         });
@@ -660,8 +669,6 @@
 
         searchInput.addEventListener('input', async function() {
             const query = this.value.trim();
-
-            // Limpiar timeout anterior
             clearTimeout(searchTimeout);
 
             if (query.length < 2) {
@@ -669,15 +676,10 @@
                 return;
             }
 
-            // Debounce: esperar 300ms antes de buscar
             searchTimeout = setTimeout(async () => {
                 try {
                     const response = await fetch(`${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}&limit=10`);
-
-                    if (!response.ok) {
-                        throw new Error('Error al buscar estudiantes');
-                    }
-
+                    if (!response.ok) throw new Error('Error al buscar estudiantes');
                     const data = await response.json();
                     displaySearchResults(data.results);
                 } catch (error) {
@@ -717,12 +719,9 @@
         // Seleccionar estudiante desde la búsqueda
         async function selectStudent(codigo) {
             try {
-                // Rellenar campos básicos
                 document.getElementById('studentCode').value = codigo;
                 searchInput.value = '';
                 searchResults.style.display = 'none';
-
-                // Cargar datos completos del estudiante
                 await loadStudentDataByCode(codigo);
             } catch (error) {
                 console.error('Error al seleccionar estudiante:', error);
@@ -733,11 +732,8 @@
         async function loadStudentDataByCode(codigo) {
             try {
                 const response = await fetch(`${API_BASE_URL}/api/students/${codigo}`);
-
-                if (!response.ok) {
-                    throw new Error('Estudiante no encontrado');
-                }
-
+                if (!response.ok) throw new Error('Estudiante no encontrado');
+                
                 const data = await response.json();
                 selectedStudent = data.student;
 
@@ -746,74 +742,27 @@
                 document.getElementById('studentName').value = selectedStudent.nombre;
                 document.getElementById('edad').value = selectedStudent.edad || 20;
 
-                // Mapear carrera
-                const carreraSelect = document.getElementById('carrera');
                 const carreraMap = {
-                    'Ingeniería': 'ing',
-                    'Ingeniería de Sistemas': 'ing',
-                    'Administración': 'adm',
-                    'Derecho': 'der',
-                    'Medicina': 'med'
+                    'Ingeniería': 'ing', 'Ingeniería de Sistemas': 'ing',
+                    'Administración': 'adm', 'Derecho': 'der', 'Medicina': 'med'
                 };
                 const carreraValue = carreraMap[selectedStudent.carrera];
-                if (carreraValue) {
-                    carreraSelect.value = carreraValue;
-                }
-
+                if (carreraValue) document.getElementById('carrera').value = carreraValue;
                 document.getElementById('ciclo').value = selectedStudent.ciclo || '';
 
-                // Rellenar variables categóricas si existen
-                if (selectedStudent.sueno_horas) {
-                    setButtonValue('sueno_horas', selectedStudent.sueno_horas);
-                }
-                if (selectedStudent.actividad_fisica) {
-                    setButtonValue('actividad_fisica', selectedStudent.actividad_fisica);
-                }
-                if (selectedStudent.alimentacion) {
-                    setButtonValue('alimentacion', selectedStudent.alimentacion);
-                }
-                if (selectedStudent.estilo_de_vida) {
-                    setButtonValue('estilo_de_vida', selectedStudent.estilo_de_vida);
-                }
-                if (selectedStudent.estres_academico) {
-                    setButtonValue('estres_academico', selectedStudent.estres_academico);
-                }
-                if (selectedStudent.apoyo_familiar) {
-                    setButtonValue('apoyo_familiar', selectedStudent.apoyo_familiar);
-                }
-                if (selectedStudent.bienestar) {
-                    setButtonValue('bienestar', selectedStudent.bienestar);
-                }
-                if (selectedStudent.asistencia) {
-                    setButtonValue('asistencia', selectedStudent.asistencia);
-                }
-                if (selectedStudent.horas_estudio) {
-                    setButtonValue('horas_estudio', selectedStudent.horas_estudio);
-                }
-                if (selectedStudent.interes_academico) {
-                    setButtonValue('interes_academico', selectedStudent.interes_academico);
-                }
-                if (selectedStudent.rendimiento_academico) {
-                    setButtonValue('rendimiento_academico', selectedStudent.rendimiento_academico);
-                }
-                if (selectedStudent.historial_academico) {
-                    setButtonValue('historial_academico', selectedStudent.historial_academico);
-                }
-                if (selectedStudent.carga_laboral) {
-                    setButtonValue('carga_laboral', selectedStudent.carga_laboral);
-                }
-                if (selectedStudent.beca) {
-                    setButtonValue('beca', selectedStudent.beca);
-                }
-                if (selectedStudent.deudor) {
-                    setButtonValue('deudor', selectedStudent.deudor);
-                }
+                // Rellenar variables categóricas
+                const variables = ['sueno_horas', 'actividad_fisica', 'alimentacion', 'estilo_de_vida',
+                    'estres_academico', 'apoyo_familiar', 'bienestar', 'asistencia', 'horas_estudio',
+                    'interes_academico', 'rendimiento_academico', 'historial_academico', 'carga_laboral',
+                    'beca', 'deudor'];
+                
+                variables.forEach(v => {
+                    if (selectedStudent[v]) setButtonValue(v, selectedStudent[v]);
+                });
 
-                // Rellenar notas del tutor si existen
                 if (selectedStudent.notas_tutor) {
                     document.getElementById('tutorNotes').value = selectedStudent.notas_tutor;
-                    const count = selectedStudent.notas_tutor.length;
-                    charCounter.textContent = `${count} / 500 caracteres`;
+                    charCounter.textContent = `${selectedStudent.notas_tutor.length} / 500 caracteres`;
                 }
 
                 alert(`✅ Datos cargados exitosamente para ${selectedStudent.nombre}`);
@@ -828,27 +777,18 @@
             const group = document.querySelector(`[data-variable="${variableName}"]`);
             if (!group) return;
 
-            // Remover active de todos los botones
-            group.querySelectorAll('.btn-option').forEach(btn => {
-                btn.classList.remove('active');
-            });
-
-            // Activar el botón correspondiente
+            group.querySelectorAll('.btn-option').forEach(btn => btn.classList.remove('active'));
             const targetButton = group.querySelector(`[data-value="${value}"]`);
-            if (targetButton) {
-                targetButton.classList.add('active');
-            }
+            if (targetButton) targetButton.classList.add('active');
         }
 
         // Función para cargar datos del estudiante (botón "Cargar datos")
         async function loadStudentData() {
             const codigo = document.getElementById('studentCode').value.trim();
-
             if (!codigo) {
                 alert('Por favor ingrese un código de estudiante');
                 return;
             }
-
             await loadStudentDataByCode(codigo);
         }
 
@@ -862,17 +802,13 @@
         // Función para recopilar valores categóricos seleccionados
         function getFormData() {
             const categoricalData = {};
-
-            // Iterar sobre todos los grupos de botones
             document.querySelectorAll('[data-variable]').forEach(group => {
                 const variable = group.getAttribute('data-variable');
                 const activeButton = group.querySelector('.btn-option.active');
-
                 if (activeButton) {
                     categoricalData[variable] = activeButton.getAttribute('data-value');
                 }
             });
-
             return categoricalData;
         }
 
@@ -885,7 +821,6 @@
             const ciclo = document.getElementById('ciclo').value;
 
             const errors = [];
-
             if (!codigo) errors.push('Código del estudiante');
             if (!nombre) errors.push('Nombre del estudiante');
             if (!edad) errors.push('Edad');
@@ -897,31 +832,19 @@
                 return null;
             }
 
-            return {
-                codigo,
-                nombre,
-                carrera,
-                ciclo: parseInt(ciclo),
-                edad: parseInt(edad)
-            };
+            return { codigo, nombre, carrera, ciclo: parseInt(ciclo), edad: parseInt(edad) };
         }
 
-        // Función para generar predicción
+        // Función para generar predicción con manejo robusto de CORS
         async function generarPrediccion() {
-            // Validar datos del estudiante
             const basicData = validateStudentData();
             if (!basicData) return;
 
-            // Recopilar datos categóricos
             const categoricalData = getFormData();
-
-            // Verificar que todas las variables estén seleccionadas
-            const requiredVariables = [
-                'sueno_horas', 'actividad_fisica', 'alimentacion', 'estilo_de_vida',
-                'estres_academico', 'apoyo_familiar', 'bienestar', 'asistencia',
-                'horas_estudio', 'interes_academico', 'rendimiento_academico',
-                'historial_academico', 'carga_laboral', 'beca', 'deudor'
-            ];
+            const requiredVariables = ['sueno_horas', 'actividad_fisica', 'alimentacion', 'estilo_de_vida',
+                'estres_academico', 'apoyo_familiar', 'bienestar', 'asistencia', 'horas_estudio',
+                'interes_academico', 'rendimiento_academico', 'historial_academico', 'carga_laboral',
+                'beca', 'deudor'];
 
             const missingVariables = requiredVariables.filter(v => !categoricalData[v]);
             if (missingVariables.length > 0) {
@@ -929,62 +852,152 @@
                 return;
             }
 
-            // Preparar payload para el backend
             const payload = {
                 codigo: basicData.codigo,
                 nombre: basicData.nombre,
                 carrera: basicData.carrera,
                 ciclo: basicData.ciclo,
                 edad: basicData.edad,
-                promedio_ponderado: 14.0, // Valor por defecto, se puede agregar un campo
+                promedio_ponderado: 14.0,
                 datos: categoricalData,
                 notas_tutor: document.getElementById('tutorNotes').value.trim() || null
             };
 
-            console.log('Enviando datos:', payload);
+            console.log('📤 Enviando datos:', payload);
 
             try {
                 const response = await fetch(`${API_BASE_URL}/api/students/register`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    mode: 'cors',
+                    credentials: 'omit',
                     body: JSON.stringify(payload)
                 });
 
+                console.log('📥 Respuesta recibida:', response.status, response.statusText);
+
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'Error al registrar estudiante');
+                    let errorMsg = `Error ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMsg = errorData.detail || errorData.message || errorMsg;
+                    } catch (e) {
+                        console.warn('No se pudo parsear error JSON');
+                    }
+                    throw new Error(errorMsg);
                 }
 
                 const result = await response.json();
-                console.log('Resultado:', result);
-
-                if (result.prediction) {
-                    alert(`✅ Estudiante registrado exitosamente!\n\n` +
-                          `Nombre: ${basicData.nombre}\n` +
-                          `Código: ${basicData.codigo}\n\n` +
-                          `📊 Predicción:\n` +
-                          `Riesgo: ${result.prediction.risk_label}\n` +
-                          `Clúster: ${result.prediction.cluster_name}\n` +
-                          `Probabilidad de deserción: ${(result.prediction.desertion_probability * 100).toFixed(1)}%`);
-                } else {
-                    alert(`✅ Estudiante registrado exitosamente!\n\n` +
-                          `Nombre: ${basicData.nombre}\n` +
-                          `Código: ${basicData.codigo}\n\n` +
-                          `⚠️ Predicción no disponible (modelo en entrenamiento)`);
-                }
-
-                // Redirigir al panel del tutor
-                setTimeout(() => {
-                    window.location.href = '/panel';
-                }, 2000);
+                console.log('✅ Resultado:', result);
+                mostrarResultadoExitoso(result, basicData);
 
             } catch (error) {
-                console.error('Error al generar predicción:', error);
-                alert('❌ Error al registrar estudiante:\n' + error.message);
+                console.error('❌ Error completo:', error);
+                if (error.message.includes('CORS') || error.message.includes('NetworkError')) {
+                    console.log('🔄 Reintentando con XMLHttpRequest...');
+                    await generarPrediccionXHR(payload, basicData);
+                } else {
+                    mostrarError(error);
+                }
             }
         }
+
+        // Función alternativa usando XMLHttpRequest
+        async function generarPrediccionXHR(payload, basicData) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `${API_BASE_URL}/api/students/register`, true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.timeout = 30000;
+
+                xhr.onload = function() {
+                    console.log('📥 XHR Respuesta:', xhr.status, xhr.statusText);
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            const result = JSON.parse(xhr.responseText);
+                            console.log('✅ Resultado (XHR):', result);
+                            mostrarResultadoExitoso(result, basicData);
+                            resolve(result);
+                        } catch (e) {
+                            console.error('Error al parsear JSON:', e);
+                            mostrarError(new Error('Error al procesar respuesta del servidor'));
+                            reject(e);
+                        }
+                    } else {
+                        let errorMsg = `Error ${xhr.status}: ${xhr.statusText}`;
+                        try {
+                            const errorData = JSON.parse(xhr.responseText);
+                            errorMsg = errorData.detail || errorData.message || errorMsg;
+                        } catch (e) { console.warn('No se pudo parsear error JSON (XHR)'); }
+                        mostrarError(new Error(errorMsg));
+                        reject(new Error(errorMsg));
+                    }
+                };
+
+                xhr.onerror = () => {
+                    console.error('❌ Error de red (XHR)');
+                    mostrarError(new Error('Error de conexión. Verifique que el backend esté en ' + API_BASE_URL));
+                    reject(new Error('Error de red'));
+                };
+
+                xhr.ontimeout = () => {
+                    console.error('⏱️ Timeout (XHR)');
+                    mostrarError(new Error('Tiempo de espera agotado'));
+                    reject(new Error('Timeout'));
+                };
+
+                console.log('📤 Enviando con XHR:', payload);
+                xhr.send(JSON.stringify(payload));
+            });
+        }
+
+        // Mostrar resultado exitoso
+        function mostrarResultadoExitoso(result, basicData) {
+            if (result.prediction) {
+                const desercionPct = (result.prediction.desertion_probability || 0).toFixed(1);
+                alert(`✅ Estudiante registrado exitosamente!\n\n` +
+                      `Nombre: ${basicData.nombre}\nCódigo: ${basicData.codigo}\n\n` +
+                      `📊 Predicción:\nRiesgo: ${result.prediction.risk_label}\n` +
+                      `Clúster: ${result.prediction.cluster_name}\n` +
+                      `Probabilidad de deserción: ${desercionPct}%`);
+            } else {
+                alert(`✅ Estudiante registrado exitosamente!\n\n` +
+                      `Nombre: ${basicData.nombre}\nCódigo: ${basicData.codigo}\n\n` +
+                      `⚠️ Predicción no disponible`);
+            }
+            setTimeout(() => { window.location.href = '/frontend/panel.html'; }, 2000);
+        }
+
+        // Mostrar error
+        function mostrarError(error) {
+            const mensaje = error.message || 'Error desconocido';
+            let sugerencia = '';
+            if (mensaje.includes('Failed to fetch') || mensaje.includes('NetworkError') || mensaje.includes('CORS')) {
+                sugerencia = '\n\n💡 Sugerencia:\n' +
+                           '1. Verifique que el backend esté corriendo: python main_v2.py\n' +
+                           '2. El backend debe estar en: http://localhost:8000\n' +
+                           '3. Si usa Live Server, configure CORS en el backend';
+            }
+            alert(`❌ Error al registrar estudiante:\n\n${mensaje}${sugerencia}`);
+        }
+
+        // Probar conexión al cargar la página
+        window.addEventListener('load', async () => {
+            try {
+                console.log('🔍 Probando conexión con el backend...');
+                const response = await fetch(`${API_BASE_URL}/api/stats`, { method: 'GET', mode: 'cors' });
+                if (response.ok) {
+                    console.log('✅ Backend conectado correctamente');
+                } else {
+                    console.warn('⚠️ Backend responde pero con error:', response.status);
+                }
+            } catch (error) {
+                console.error('❌ No se pudo conectar al backend:', error.message);
+                console.warn('⚠️ Algunas funciones pueden no estar disponibles');
+            }
+        });
     </script>
 </body>
 </html>
+``` 
