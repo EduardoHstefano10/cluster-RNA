@@ -20,12 +20,65 @@
             --border-color: #374151;
         }
 
+        /* Light Theme */
+        [data-theme="light"] {
+            --bg-dark: #f8fafc;
+            --bg-card: #ffffff;
+            --bg-input: #f1f5f9;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --accent-yellow: #f59e0b;
+            --accent-green: #059669;
+            --accent-red: #dc2626;
+            --accent-orange: #ea580c;
+            --border-color: #e2e8f0;
+        }
+
         body {
             background-color: var(--bg-dark);
             color: var(--text-primary);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             min-height: 100vh;
             padding: 20px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 50px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .theme-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .theme-icon {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .theme-toggle:hover .theme-icon {
+            transform: rotate(20deg);
+        }
+
+        .theme-text {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-primary);
         }
 
         .breadcrumb {
@@ -65,6 +118,12 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
         }
 
         .stat-label {
@@ -118,6 +177,7 @@
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
+            transition: all 0.3s ease;
         }
 
         .filter-section {
@@ -179,6 +239,7 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             overflow: hidden;
+            transition: all 0.3s ease;
         }
 
         .table-header {
@@ -326,13 +387,21 @@
             display: flex;
             gap: 8px;
             margin-top: 12px;
+            flex-wrap: wrap;
+            align-items: center;
         }
 
         .cluster-tag {
             padding: 6px 12px;
             border-radius: 6px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 500;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .cluster-tag:hover {
+            transform: scale(1.05);
         }
 
         .cluster-c1 {
@@ -352,6 +421,12 @@
     </style>
 </head>
 <body>
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" id="themeToggle" aria-label="Cambiar tema">
+        <span class="theme-icon" id="themeIcon">🌙</span>
+        <span class="theme-text" id="themeText">Oscuro</span>
+    </button>
+
     <div class="container-fluid" style="max-width: 1600px;">
         <!-- Breadcrumb -->
         <nav aria-label="breadcrumb">
@@ -699,11 +774,11 @@
                     method: 'GET',
                     mode: 'cors'
                 });
-                
+
                 if (response.ok) {
                     const stats = await response.json();
                     console.log('✅ Backend conectado. Estadísticas:', stats);
-                    
+
                     // Actualizar estadísticas en la UI
                     document.querySelector('.stat-card:nth-child(1) .stat-value').textContent = stats.total_estudiantes || '128';
                     document.querySelector('.stat-card:nth-child(2) .stat-value').textContent = `${stats.precision_modelo || '92.4'}%`;
@@ -716,9 +791,40 @@
                 console.error('❌ No se pudo conectar al backend:', error.message);
                 console.warn('⚠️ El panel mostrará datos de ejemplo');
             }
-            
+
             // Cargar estudiantes
             loadStudents();
+        });
+
+        // Theme Toggle Functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const themeText = document.getElementById('themeText');
+        const htmlElement = document.documentElement;
+
+        // Cargar tema guardado del localStorage
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+            htmlElement.setAttribute('data-theme', 'light');
+            themeIcon.textContent = '☀️';
+            themeText.textContent = 'Claro';
+        }
+
+        // Toggle entre temas
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = htmlElement.getAttribute('data-theme');
+
+            if (currentTheme === 'light') {
+                htmlElement.removeAttribute('data-theme');
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Oscuro';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                htmlElement.setAttribute('data-theme', 'light');
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Claro';
+                localStorage.setItem('theme', 'light');
+            }
         });
     </script>
 </body>
