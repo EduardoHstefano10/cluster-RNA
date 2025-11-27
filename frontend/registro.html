@@ -6,6 +6,7 @@
     <title>Registrar / Actualizar Datos del Estudiante — Sistema de Alerta Temprana</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
             --bg-dark: #0f1419;
@@ -283,6 +284,22 @@
             color: var(--text-secondary);
             font-style: italic;
         }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Mejorar estilo del buscador */
+        #searchStudent:focus {
+            border-color: var(--accent-yellow);
+            box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+        }
+
+        /* Swal2 dark theme customization */
+        .swal2-popup {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
     </style>
 </head>
 <body>
@@ -297,9 +314,14 @@
         </nav>
 
         <!-- Header -->
-        <div class="header-section">
-            <h1>Registrar / Actualizar Datos del Estudiante — Sistema de Alerta Temprana</h1>
-            <p>Gestión de datos del estudiante para predicción temprana de riesgo académico y clúster de comportamiento.</p>
+        <div class="header-section" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>Registrar / Actualizar Datos del Estudiante — Sistema de Alerta Temprana</h1>
+                <p>Gestión de datos del estudiante para predicción temprana de riesgo académico y clúster de comportamiento.</p>
+            </div>
+            <button class="btn-primary-custom" onclick="nuevoRegistro()" style="height: fit-content; background: #ef4444; white-space: nowrap;">
+                <i class="bi bi-person-plus-fill"></i> Registrar estudiante
+            </button>
         </div>
 
         <!-- Stats Grid -->
@@ -643,6 +665,26 @@
         // Variable global para el estudiante seleccionado
         let selectedStudent = null;
 
+        // Función para nuevo registro (limpiar formulario)
+        function nuevoRegistro() {
+            Swal.fire({
+                title: '¿Nuevo registro?',
+                text: 'Se limpiarán todos los campos del formulario',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, limpiar',
+                cancelButtonText: 'Cancelar',
+                background: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                confirmButtonColor: 'var(--accent-yellow)',
+                cancelButtonColor: '#6b7280'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    location.reload();
+                }
+            });
+        }
+
         // Manejar selección de botones de opción
         document.querySelectorAll('.btn-option').forEach(button => {
             button.addEventListener('click', function() {
@@ -676,26 +718,37 @@
                 return;
             }
 
+            // Mostrar indicador de carga
+            searchResults.innerHTML = '<div style="padding: 12px; color: var(--text-secondary); text-align: center;"><i class="bi bi-arrow-repeat" style="animation: spin 1s linear infinite;"></i> Buscando...</div>';
+            searchResults.style.display = 'block';
+
             searchTimeout = setTimeout(async () => {
                 try {
                     const response = await fetch(`${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}&limit=10`);
                     if (!response.ok) throw new Error('Error al buscar estudiantes');
                     const data = await response.json();
-                    displaySearchResults(data.results);
+                    displaySearchResults(data.results, query);
                 } catch (error) {
                     console.error('Error en búsqueda:', error);
-                    searchResults.innerHTML = '<div style="padding: 12px; color: var(--text-secondary);">Error al buscar estudiantes</div>';
+                    searchResults.innerHTML = '<div style="padding: 12px; color: var(--text-secondary);"><i class="bi bi-exclamation-triangle"></i> Error al buscar estudiantes</div>';
                     searchResults.style.display = 'block';
                 }
             }, 300);
         });
 
         // Mostrar resultados de búsqueda
-        function displaySearchResults(results) {
+        function displaySearchResults(results, query = '') {
             if (results.length === 0) {
-                searchResults.innerHTML = '<div style="padding: 12px; color: var(--text-secondary);">No se encontraron estudiantes</div>';
+                searchResults.innerHTML = '<div style="padding: 12px; color: var(--text-secondary); text-align: center;"><i class="bi bi-search"></i> No se encontraron estudiantes</div>';
                 searchResults.style.display = 'block';
                 return;
+            }
+
+            // Función para resaltar texto
+            function highlightText(text, query) {
+                if (!query) return text;
+                const regex = new RegExp(`(${query})`, 'gi');
+                return text.replace(regex, '<mark style="background: var(--accent-yellow); color: #000; padding: 2px 4px; border-radius: 3px;">$1</mark>');
             }
 
             const html = results.map(student => `
@@ -703,11 +756,14 @@
                     padding: 12px;
                     cursor: pointer;
                     border-bottom: 1px solid var(--border-color);
-                    transition: background 0.2s;
-                " onmouseover="this.style.background='var(--bg-input)'" onmouseout="this.style.background='transparent'">
-                    <div style="font-weight: 600;">${student.nombre}</div>
-                    <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                        Código: ${student.codigo} | ${student.carrera || 'Sin carrera'} | Ciclo ${student.ciclo || 'N/A'}
+                    transition: all 0.2s;
+                " onmouseover="this.style.background='var(--bg-input)'; this.style.borderLeft='3px solid var(--accent-yellow)'" onmouseout="this.style.background='transparent'; this.style.borderLeft='none'">
+                    <div style="font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        <i class="bi bi-person-circle" style="color: var(--accent-yellow);"></i>
+                        ${highlightText(student.nombre, query)}
+                    </div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary); margin-left: 28px;">
+                        Código: ${highlightText(student.codigo, query)} | ${student.carrera || 'Sin carrera'} | Ciclo ${student.ciclo || 'N/A'}
                     </div>
                 </div>
             `).join('');
@@ -765,10 +821,26 @@
                     charCounter.textContent = `${selectedStudent.notas_tutor.length} / 500 caracteres`;
                 }
 
-                alert(`✅ Datos cargados exitosamente para ${selectedStudent.nombre}`);
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Datos cargados',
+                    text: `Datos cargados exitosamente para ${selectedStudent.nombre}`,
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    confirmButtonColor: 'var(--accent-yellow)',
+                    confirmButtonText: 'OK'
+                });
             } catch (error) {
                 console.error('Error al cargar datos:', error);
-                alert('❌ Error al cargar datos del estudiante: ' + error.message);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Error al cargar datos del estudiante: ' + error.message,
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    confirmButtonColor: 'var(--accent-yellow)',
+                    confirmButtonText: 'OK'
+                });
             }
         }
 
@@ -786,7 +858,15 @@
         async function loadStudentData() {
             const codigo = document.getElementById('studentCode').value.trim();
             if (!codigo) {
-                alert('Por favor ingrese un código de estudiante');
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Atención',
+                    text: 'Por favor ingrese un código de estudiante',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    confirmButtonColor: 'var(--accent-yellow)',
+                    confirmButtonText: 'OK'
+                });
                 return;
             }
             await loadStudentDataByCode(codigo);
@@ -828,7 +908,15 @@
             if (!ciclo || ciclo === 'Seleccionar ciclo') errors.push('Ciclo');
 
             if (errors.length > 0) {
-                alert('Por favor complete los siguientes campos:\n- ' + errors.join('\n- '));
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Campos incompletos',
+                    html: 'Por favor complete los siguientes campos:<br><br>' + errors.map(e => '• ' + e).join('<br>'),
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    confirmButtonColor: 'var(--accent-yellow)',
+                    confirmButtonText: 'OK'
+                });
                 return null;
             }
 
@@ -848,7 +936,15 @@
 
             const missingVariables = requiredVariables.filter(v => !categoricalData[v]);
             if (missingVariables.length > 0) {
-                alert('Por favor seleccione una opción para todas las variables categóricas.\nFaltantes: ' + missingVariables.join(', '));
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Variables incompletas',
+                    html: 'Por favor seleccione una opción para todas las variables categóricas.<br><br><strong>Faltantes:</strong><br>' + missingVariables.map(v => '• ' + v.replace(/_/g, ' ')).join('<br>'),
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    confirmButtonColor: 'var(--accent-yellow)',
+                    confirmButtonText: 'OK'
+                });
                 return;
             }
 
@@ -864,6 +960,18 @@
             };
 
             console.log('📤 Enviando datos:', payload);
+
+            // Mostrar loader mientras se procesa
+            Swal.fire({
+                title: 'Procesando...',
+                html: 'Generando predicción y registrando estudiante',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                },
+                background: 'var(--bg-card)',
+                color: 'var(--text-primary)'
+            });
 
             try {
                 const response = await fetch(`${API_BASE_URL}/api/students/register`, {
@@ -956,30 +1064,132 @@
         function mostrarResultadoExitoso(result, basicData) {
             if (result.prediction) {
                 const desercionPct = (result.prediction.desertion_probability || 0).toFixed(1);
-                alert(`✅ Estudiante registrado exitosamente!\n\n` +
-                      `Nombre: ${basicData.nombre}\nCódigo: ${basicData.codigo}\n\n` +
-                      `📊 Predicción:\nRiesgo: ${result.prediction.risk_label}\n` +
-                      `Clúster: ${result.prediction.cluster_name}\n` +
-                      `Probabilidad de deserción: ${desercionPct}%`);
+                const riesgo = result.prediction.risk_label;
+                const cluster = result.prediction.cluster_name;
+
+                // Determinar icono según riesgo
+                let iconType = 'success';
+                if (desercionPct > 60) iconType = 'warning';
+                if (desercionPct > 80) iconType = 'error';
+
+                Swal.fire({
+                    icon: iconType,
+                    title: '¡Estudiante registrado!',
+                    html: `
+                        <div style="text-align: left; padding: 10px;">
+                            <p><strong>Nombre:</strong> ${basicData.nombre}</p>
+                            <p><strong>Código:</strong> ${basicData.codigo}</p>
+                            <hr>
+                            <h4 style="margin-top: 15px;">📊 Predicción generada</h4>
+                            <p><strong>Nivel de riesgo:</strong> <span style="color: ${desercionPct > 60 ? '#f59e0b' : '#10b981'}">${riesgo}</span></p>
+                            <p><strong>Clúster asignado:</strong> ${cluster}</p>
+                            <p><strong>Probabilidad de deserción:</strong> <span style="color: ${desercionPct > 60 ? '#f59e0b' : '#10b981'}; font-size: 1.2em; font-weight: bold;">${desercionPct}%</span></p>
+                        </div>
+                    `,
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    confirmButtonColor: 'var(--accent-yellow)',
+                    confirmButtonText: 'Ver panel',
+                    showCancelButton: true,
+                    cancelButtonText: 'Registrar otro',
+                    cancelButtonColor: '#6b7280'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '/frontend/panel.html';
+                    } else {
+                        location.reload();
+                    }
+                });
             } else {
-                alert(`✅ Estudiante registrado exitosamente!\n\n` +
-                      `Nombre: ${basicData.nombre}\nCódigo: ${basicData.codigo}\n\n` +
-                      `⚠️ Predicción no disponible`);
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Estudiante registrado!',
+                    html: `
+                        <div style="text-align: left; padding: 10px;">
+                            <p><strong>Nombre:</strong> ${basicData.nombre}</p>
+                            <p><strong>Código:</strong> ${basicData.codigo}</p>
+                            <hr>
+                            <p style="color: var(--text-secondary);">⚠️ Predicción no disponible en este momento</p>
+                        </div>
+                    `,
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    confirmButtonColor: 'var(--accent-yellow)',
+                    confirmButtonText: 'Ver panel',
+                    showCancelButton: true,
+                    cancelButtonText: 'Registrar otro',
+                    cancelButtonColor: '#6b7280'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '/frontend/panel.html';
+                    } else {
+                        location.reload();
+                    }
+                });
             }
-            setTimeout(() => { window.location.href = '/frontend/panel.html'; }, 2000);
         }
 
         // Mostrar error
         function mostrarError(error) {
             const mensaje = error.message || 'Error desconocido';
-            let sugerencia = '';
+            let sugerenciaHtml = '';
+
             if (mensaje.includes('Failed to fetch') || mensaje.includes('NetworkError') || mensaje.includes('CORS')) {
-                sugerencia = '\n\n💡 Sugerencia:\n' +
-                           '1. Verifique que el backend esté corriendo: python main_v2.py\n' +
-                           '2. El backend debe estar en: http://localhost:8000\n' +
-                           '3. Si usa Live Server, configure CORS en el backend';
+                sugerenciaHtml = `
+                    <div style="text-align: left; margin-top: 15px; padding: 10px; background: rgba(251, 191, 36, 0.1); border-radius: 8px;">
+                        <h4 style="margin-top: 0;">💡 Sugerencias:</h4>
+                        <ol style="margin: 5px 0; padding-left: 20px;">
+                            <li>Verifique que el backend esté corriendo:<br><code>python main_v2.py</code></li>
+                            <li>El backend debe estar en:<br><code>http://localhost:8000</code></li>
+                            <li>Si usa Live Server, configure CORS en el backend</li>
+                        </ol>
+                    </div>
+                `;
             }
-            alert(`❌ Error al registrar estudiante:\n\n${mensaje}${sugerencia}`);
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al registrar estudiante',
+                html: `
+                    <div style="text-align: left;">
+                        <p><strong>Mensaje de error:</strong></p>
+                        <p style="color: var(--text-secondary); font-family: monospace;">${mensaje}</p>
+                        ${sugerenciaHtml}
+                    </div>
+                `,
+                background: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                confirmButtonColor: 'var(--accent-yellow)',
+                confirmButtonText: 'Entendido'
+            });
+        }
+
+        // Cargar estadísticas del dashboard
+        async function loadDashboardStats() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/stats`, { method: 'GET', mode: 'cors' });
+                if (response.ok) {
+                    const stats = await response.json();
+
+                    // Actualizar estadísticas en el DOM
+                    document.querySelector('.stat-value').textContent = stats.total_estudiantes || '0';
+
+                    // Actualizar última actualización
+                    const now = new Date();
+                    const dateStr = now.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    const timeStr = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+                    const statCards = document.querySelectorAll('.stat-value');
+                    if (statCards[1]) {
+                        statCards[1].textContent = `${dateStr} · ${timeStr}`;
+                    }
+
+                    console.log('✅ Estadísticas cargadas:', stats);
+                } else {
+                    console.warn('⚠️ No se pudieron cargar las estadísticas');
+                }
+            } catch (error) {
+                console.warn('⚠️ Error al cargar estadísticas:', error.message);
+            }
         }
 
         // Probar conexión al cargar la página
@@ -989,6 +1199,7 @@
                 const response = await fetch(`${API_BASE_URL}/api/stats`, { method: 'GET', mode: 'cors' });
                 if (response.ok) {
                     console.log('✅ Backend conectado correctamente');
+                    await loadDashboardStats();
                 } else {
                     console.warn('⚠️ Backend responde pero con error:', response.status);
                 }
