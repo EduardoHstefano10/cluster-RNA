@@ -103,6 +103,19 @@ async def panel_tutor():
         )
 
 
+@app.get("/comparacion", response_class=HTMLResponse)
+async def comparacion_modelos():
+    """Página de comparación de modelos"""
+    try:
+        with open('frontend/comparacion.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Error: No se encontró el archivo comparacion.html</h1>",
+            status_code=404
+        )
+
+
 @app.get("/perfil/{codigo}", response_class=HTMLResponse)
 async def perfil_estudiante(codigo: str):
     """Perfil del estudiante"""
@@ -467,6 +480,87 @@ async def get_student_profile(codigo: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/comparacion-modelos")
+async def get_comparacion_modelos(limit: int = 10):
+    """Obtener comparación de entrenamientos de modelos con mayor precisión destacada"""
+    try:
+        entrenamientos_db = EntrenamientosDB()
+        historial = entrenamientos_db.get_historial_entrenamientos(limit=limit)
+        entrenamientos_db.close()
+
+        if not historial:
+            return {
+                "total": 0,
+                "entrenamientos": [],
+                "mejor_modelo": None,
+                "estadisticas": {
+                    "precision_promedio": 0,
+                    "precision_max": 0,
+                    "precision_min": 0
+                }
+            }
+
+        # Procesar datos
+        entrenamientos_procesados = []
+        precisiones = []
+
+        for e in historial:
+            precision = float(e.get('precision_modelo', 0))
+            precisiones.append(precision)
+
+            # Parsear métricas JSON
+            metricas = {}
+            if e.get('metricas_json'):
+                try:
+                    import json
+                    if isinstance(e['metricas_json'], str):
+                        metricas = json.loads(e['metricas_json'])
+                    else:
+                        metricas = e['metricas_json']
+                except:
+                    metricas = {}
+
+            entrenamientos_procesados.append({
+                "id": e.get('id'),
+                "fecha_entrenamiento": str(e.get('fecha_entrenamiento')),
+                "num_estudiantes": e.get('num_estudiantes_entrenamiento', 0),
+                "precision_modelo": precision,
+                "modelo_version": e.get('modelo_version', 'v2'),
+                "observaciones": e.get('observaciones', ''),
+                "metricas": {
+                    "train_accuracy": metricas.get('train_accuracy', 0),
+                    "test_accuracy": metricas.get('test_accuracy', 0),
+                    "n_components": metricas.get('n_components', 0),
+                    "gap": abs(metricas.get('train_accuracy', 0) - metricas.get('test_accuracy', 0)) if metricas.get('train_accuracy') and metricas.get('test_accuracy') else 0
+                }
+            })
+
+        # Encontrar mejor modelo (mayor precisión)
+        mejor_indice = precisiones.index(max(precisiones)) if precisiones else 0
+        mejor_modelo = entrenamientos_procesados[mejor_indice] if entrenamientos_procesados else None
+
+        # Calcular estadísticas
+        estadisticas = {
+            "precision_promedio": sum(precisiones) / len(precisiones) if precisiones else 0,
+            "precision_max": max(precisiones) if precisiones else 0,
+            "precision_min": min(precisiones) if precisiones else 0,
+            "total_entrenamientos": len(entrenamientos_procesados)
+        }
+
+        return {
+            "total": len(entrenamientos_procesados),
+            "entrenamientos": entrenamientos_procesados,
+            "mejor_modelo": mejor_modelo,
+            "estadisticas": estadisticas
+        }
+
+    except Exception as e:
+        print(f"❌ Error en /api/comparacion-modelos: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/export/students")

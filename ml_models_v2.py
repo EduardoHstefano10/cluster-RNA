@@ -369,6 +369,29 @@ def auto_train_model(force_retrain=False):
         # Guardar modelo
         model.save_model()
 
+        # Guardar entrenamiento en base de datos
+        try:
+            from database import EntrenamientosDB
+            entrenamientos_db = EntrenamientosDB()
+            entrenamiento_data = {
+                'num_estudiantes': results['n_samples'],
+                'precision': float(results['train_accuracy']) * 100,  # Convertir a porcentaje
+                'metricas': {
+                    'train_accuracy': float(results['train_accuracy']),
+                    'test_accuracy': float(results['test_accuracy']),
+                    'n_components': int(results['n_components']),
+                    'timestamp': results['timestamp']
+                },
+                'version': 'v2',
+                'observaciones': f'Entrenamiento automático con {results["n_samples"]} muestras',
+                'ruta_modelo': 'models/'
+            }
+            entrenamientos_db.guardar_entrenamiento(entrenamiento_data)
+            entrenamientos_db.close()
+            print("💾 Datos del entrenamiento guardados en la base de datos")
+        except Exception as e:
+            print(f"⚠️  Error al guardar entrenamiento en BD: {e}")
+
         print("\n" + "=" * 60)
         print("✅ ENTRENAMIENTO COMPLETADO")
         print("=" * 60)

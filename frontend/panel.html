@@ -520,6 +520,9 @@
                 </div>
 
                 <button class="btn-clear">Limpiar filtros</button>
+                <button class="btn-export" id="btnComparacion" style="margin-left: 8px; background: #3b82f6; margin-right: 8px;">
+                    <i class="bi bi-eye-fill"></i> Comparación y Mayor Precisión de Modelos
+                </button>
                 <button class="btn-export"><i class="bi bi-download"></i> Exportar listado</button>
             </div>
         </div>
@@ -754,8 +757,14 @@
             window.location.href = `/perfil/${encodeURIComponent(codigo)}`;
         }
 
+        // Comparación de modelos
+        document.getElementById('btnComparacion').addEventListener('click', function() {
+            window.location.href = '/comparacion';
+        });
+
         // Exportar listado
-        document.querySelector('.btn-export').addEventListener('click', async function() {
+        const btnExportArray = document.querySelectorAll('.btn-export');
+        btnExportArray[btnExportArray.length - 1].addEventListener('click', async function() {
             try {
                 const url = `${API_BASE_URL}/api/export/students?formato=csv`;
                 console.log('📥 Exportando desde:', url);
