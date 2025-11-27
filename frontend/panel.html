@@ -519,6 +519,17 @@
                     </div>
                 </div>
 
+                <div style="flex: 1; min-width: 250px;">
+                    <label class="stat-label mb-2">Buscar estudiante</label>
+                    <div class="filter-group">
+                        <input type="text"
+                               id="searchInput"
+                               class="form-control"
+                               placeholder="Buscar por nombre o código..."
+                               style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 16px; border-radius: 6px; font-size: 0.875rem; width: 100%;">
+                    </div>
+                </div>
+
                 <button class="btn-clear">Limpiar filtros</button>
                 <button class="btn-export"><i class="bi bi-download"></i> Exportar listado</button>
             </div>
@@ -591,15 +602,91 @@
                     btn.classList.remove('active');
                 }
             });
+            // Limpiar campo de búsqueda
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.value = '';
+            }
             loadStudents();
         });
+
+        // Búsqueda con debounce
+        let searchTimeout;
+        document.getElementById('searchInput').addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                loadStudents();
+            }, 500); // Esperar 500ms después de que el usuario deje de escribir
+        });
+
+        // Obtener filtros activos
+        function getActiveFilters() {
+            const filters = {
+                riesgo: null,
+                cluster: null,
+                estado: null,
+                busqueda: null
+            };
+
+            // Obtener filtro de riesgo
+            const filterGroups = document.querySelectorAll('.filter-group');
+            const riesgoGroup = filterGroups[0];
+            const riesgoBtn = riesgoGroup.querySelector('.btn-filter.active');
+            if (riesgoBtn && !riesgoBtn.textContent.includes('Todos')) {
+                const riesgoText = riesgoBtn.textContent.trim();
+                // Mapear el texto del botón al formato del backend
+                if (riesgoText.includes('Sin riesgo')) filters.riesgo = 'Sin_riesgo';
+                else if (riesgoText.includes('Leve')) filters.riesgo = 'Riesgo_leve';
+                else if (riesgoText.includes('Moderado')) filters.riesgo = 'Riesgo_moderado';
+                else if (riesgoText.includes('Alto') || riesgoText.includes('Crítico')) filters.riesgo = 'Riesgo_alto';
+            }
+
+            // Obtener filtro de clúster
+            const clusterGroup = filterGroups[1];
+            const clusterBtn = clusterGroup.querySelector('.btn-filter.active');
+            if (clusterBtn && !clusterBtn.textContent.includes('Todos')) {
+                const clusterText = clusterBtn.textContent.trim();
+                if (clusterText === 'C1') filters.cluster = 0;
+                else if (clusterText === 'C2') filters.cluster = 1;
+                else if (clusterText === 'C3') filters.cluster = 2;
+            }
+
+            // Obtener filtro de estado
+            const estadoGroup = filterGroups[2];
+            const estadoBtn = estadoGroup.querySelector('.btn-filter.active');
+            if (estadoBtn && !estadoBtn.textContent.includes('Todos')) {
+                filters.estado = estadoBtn.textContent.trim();
+            }
+
+            // Obtener búsqueda
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput && searchInput.value.trim()) {
+                filters.busqueda = searchInput.value.trim();
+            }
+
+            return filters;
+        }
 
         // Cargar estudiantes con manejo robusto
         async function loadStudents() {
             try {
-                console.log('📡 Cargando estudiantes desde:', `${API_BASE_URL}/api/students?limit=10`);
-                
-                const response = await fetch(`${API_BASE_URL}/api/students?limit=10`, {
+                // Obtener filtros activos
+                const filters = getActiveFilters();
+
+                // Construir URL con parámetros
+                const params = new URLSearchParams();
+                params.append('limit', '10');
+
+                if (filters.riesgo) params.append('riesgo', filters.riesgo);
+                if (filters.cluster !== null) params.append('cluster', filters.cluster);
+                if (filters.estado) params.append('estado', filters.estado);
+                if (filters.busqueda) params.append('busqueda', filters.busqueda);
+
+                const url = `${API_BASE_URL}/api/students?${params.toString()}`;
+                console.log('📡 Cargando estudiantes desde:', url);
+                console.log('🔍 Filtros aplicados:', filters);
+
+                const response = await fetch(url, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     mode: 'cors'
@@ -611,7 +698,7 @@
 
                 const data = await response.json();
                 console.log('✅ Datos recibidos:', data);
-                
+
                 const tbody = document.getElementById('studentsTableBody');
                 tbody.innerHTML = '';
 
@@ -621,9 +708,9 @@
                         const row = createStudentRow(student);
                         tbody.innerHTML += row;
                     });
-                    
+
                     // Actualizar contador
-                    document.querySelector('.showing-count').textContent = 
+                    document.querySelector('.showing-count').textContent =
                         `Mostrando ${data.students.length} de ${data.total || data.students.length} estudiantes`;
                 } else {
                     tbody.innerHTML = `
