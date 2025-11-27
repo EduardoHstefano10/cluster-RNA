@@ -218,6 +218,70 @@ class EstudiantesDB:
         self.db.close()
 
 
+class EntrenamientosDB:
+    """Operaciones para la tabla de entrenamientos del modelo"""
+
+    def __init__(self):
+        self.db = DatabaseConnection()
+        self.db.connect()
+
+    def guardar_entrenamiento(self, entrenamiento_data: Dict) -> bool:
+        """Guardar un nuevo entrenamiento del modelo"""
+        query = """
+        INSERT INTO entrenamientos_modelo (
+            num_estudiantes_entrenamiento,
+            precision_modelo,
+            metricas_json,
+            modelo_version,
+            observaciones,
+            ruta_modelo
+        ) VALUES (
+            %(num_estudiantes)s,
+            %(precision)s,
+            %(metricas)s,
+            %(version)s,
+            %(observaciones)s,
+            %(ruta_modelo)s
+        )
+        """
+        try:
+            import json
+            # Convertir métricas a JSON si es un dict
+            if isinstance(entrenamiento_data.get('metricas'), dict):
+                entrenamiento_data['metricas'] = json.dumps(entrenamiento_data['metricas'])
+
+            self.db.cursor.execute(query, entrenamiento_data)
+            self.db.conn.commit()
+            print(f"✅ Entrenamiento guardado exitosamente")
+            return True
+        except Exception as e:
+            print(f"❌ Error al guardar entrenamiento: {e}")
+            self.db.conn.rollback()
+            return False
+
+    def get_ultimo_entrenamiento(self) -> Optional[Dict]:
+        """Obtener el último entrenamiento registrado"""
+        query = """
+        SELECT * FROM entrenamientos_modelo
+        ORDER BY fecha_entrenamiento DESC
+        LIMIT 1
+        """
+        return self.db.fetch_one(query)
+
+    def get_historial_entrenamientos(self, limit: int = 10) -> List[Dict]:
+        """Obtener historial de entrenamientos"""
+        query = f"""
+        SELECT * FROM entrenamientos_modelo
+        ORDER BY fecha_entrenamiento DESC
+        LIMIT {limit}
+        """
+        return self.db.fetch_all(query)
+
+    def close(self):
+        """Cerrar conexión"""
+        self.db.close()
+
+
 # Funciones de utilidad
 def test_connection():
     """Probar conexión a la base de datos"""

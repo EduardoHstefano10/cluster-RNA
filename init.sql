@@ -111,8 +111,24 @@ INSERT INTO estudiantes (
      'Mayor_a_15', 'No_trabaja', 'Completa', 'Sin_deuda',
      17.8, 21, 'En seguimiento');
 
+-- Tabla para almacenar entrenamientos del modelo
+CREATE TABLE IF NOT EXISTS entrenamientos_modelo (
+    id SERIAL PRIMARY KEY,
+    fecha_entrenamiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    num_estudiantes_entrenamiento INTEGER,
+    precision_modelo DECIMAL(5,2),
+    metricas_json JSONB,  -- Almacena métricas adicionales (accuracy, precision, recall, f1-score)
+    modelo_version VARCHAR(50),
+    observaciones TEXT,
+    ruta_modelo VARCHAR(255)
+);
+
+-- Índice para consultas por fecha
+CREATE INDEX IF NOT EXISTS idx_fecha_entrenamiento ON entrenamientos_modelo(fecha_entrenamiento);
+
 -- Comentarios en las tablas
 COMMENT ON TABLE estudiantes IS 'Tabla principal que contiene toda la información de estudiantes para el Sistema de Alerta Temprana';
+COMMENT ON TABLE entrenamientos_modelo IS 'Historial de entrenamientos del modelo de predicción';
 COMMENT ON COLUMN estudiantes.sueno_horas IS 'Horas promedio de sueño diario: Menos_de_6h, Entre_6_8h, Más_de_8h';
 COMMENT ON COLUMN estudiantes.estres_academico IS 'Nivel de estrés académico: Leve, Moderado, Alto, Severo, Crítico';
 COMMENT ON COLUMN estudiantes.riesgo_predicho IS 'Resultado del modelo: Sin_riesgo, Riesgo_leve, Riesgo_moderado, Riesgo_alto, Riesgo_critico';
