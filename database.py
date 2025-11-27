@@ -105,7 +105,7 @@ class EstudiantesDB:
 
     def get_all_students(self, limit: int = None) -> pd.DataFrame:
         """Obtener todos los estudiantes como DataFrame"""
-        query = "SELECT * FROM estudiantes"
+        query = "SELECT * FROM estudiantes ORDER BY ultima_actualizacion DESC, fecha_registro DESC"
         if limit:
             query += f" LIMIT {limit}"
 
