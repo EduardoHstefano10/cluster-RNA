@@ -77,6 +77,19 @@ async def root():
         )
 
 
+@app.get("/registro", response_class=HTMLResponse)
+async def registro():
+    """Página de registro - Formulario de registro"""
+    try:
+        with open('frontend/registro.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Error: No se encontró el archivo registro.html</h1>",
+            status_code=404
+        )
+
+
 @app.get("/panel", response_class=HTMLResponse)
 async def panel_tutor():
     """Panel del tutor"""
