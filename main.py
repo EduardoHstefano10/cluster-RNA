@@ -212,8 +212,15 @@ async def get_all_students(
             if riesgo and riesgo.lower() != 'todos':
                 if not student_dict.get('riesgo_predicho'):
                     continue
-                if riesgo.lower() not in str(student_dict['riesgo_predicho']).lower():
-                    continue
+
+                # Caso especial para filtro Alto / Crítico
+                if riesgo.lower() == 'alto_critico':
+                    riesgo_actual = str(student_dict['riesgo_predicho']).lower()
+                    if 'alto' not in riesgo_actual and 'critico' not in riesgo_actual and 'crítico' not in riesgo_actual:
+                        continue
+                else:
+                    if riesgo.lower() not in str(student_dict['riesgo_predicho']).lower():
+                        continue
 
             if cluster is not None and cluster != -1:
                 if student_dict.get('cluster_asignado') != cluster:
