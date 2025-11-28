@@ -730,32 +730,120 @@ def generar_prediccion_bayesiana(datos_categoricos: dict) -> dict:
 
 
 def generar_recomendaciones(student_dict: dict) -> List[str]:
-    """Generar recomendaciones basadas en el perfil del estudiante"""
+    """Generar recomendaciones dinámicas e inteligentes basadas en el perfil del estudiante"""
     recomendaciones = []
 
     # Asegurar valores por defecto para evitar NoneType
     riesgo = str(student_dict.get('riesgo_predicho') or '')
     estres = str(student_dict.get('estres_academico') or '')
     carga_laboral = str(student_dict.get('carga_laboral') or '')
+    cluster = str(student_dict.get('cluster_asignado') or '')
+    apoyo_familiar = str(student_dict.get('apoyo_familiar') or '')
+    asistencia = str(student_dict.get('asistencia') or '')
+    promedio = float(student_dict.get('promedio_ponderado', 0) or 0)
+    horas_estudio = str(student_dict.get('horas_estudio') or '')
+    beca = str(student_dict.get('beca') or '')
+    deudor = str(student_dict.get('deudor') or '')
 
     # Normalizar para comparaciones seguras
     riesgo_lower = riesgo.lower()
     estres_norm = estres.lower()
     carga_norm = carga_laboral.lower()
+    cluster_norm = cluster.lower()
+    apoyo_norm = apoyo_familiar.lower()
+    asistencia_norm = asistencia.lower()
+    horas_estudio_norm = horas_estudio.lower()
+    beca_norm = beca.lower()
+    deudor_norm = deudor.lower()
 
-    if 'alto' in riesgo_lower or 'critico' in riesgo_lower or 'crítico' in riesgo_lower:
-        recomendaciones.append("Agendar una sesión de orientación académica prioritaria")
-        recomendaciones.append("Coordinar derivación opcional a bienestar psicológico para manejo de estrés")
+    # 🔴 RIESGO CRÍTICO - Prioridad máxima
+    if 'critico' in riesgo_lower or 'crítico' in riesgo_lower:
+        recomendaciones.append("🚨 URGENTE: Agendar sesión de intervención inmediata dentro de las próximas 48 horas")
+        recomendaciones.append("Activar protocolo de seguimiento intensivo con contacto semanal obligatorio")
+        recomendaciones.append("Coordinar con dirección de escuela para plan de contingencia académica")
 
-    if estres_norm in ['alto', 'severo', 'crítico', 'critico']:
-        recomendaciones.append("Desarrollar estrategias de manejo de estrés académico")
+        if deudor_norm in ['retraso_moderado', 'retraso_crítico', 'retraso_critico']:
+            recomendaciones.append("Gestionar urgentemente plan de pagos diferidos con administración")
 
+        if apoyo_norm in ['nulo', 'escaso']:
+            recomendaciones.append("Conectar con servicios de asistencia social y apoyo estudiantil externo")
+
+    # 🟠 RIESGO ALTO - Intervención prioritaria
+    elif 'alto' in riesgo_lower:
+        recomendaciones.append("Agendar sesión de orientación académica prioritaria en los próximos 7 días")
+        recomendaciones.append("Iniciar seguimiento quincenal estructurado con objetivos medibles")
+
+        if estres_norm in ['alto', 'severo', 'crítico', 'critico']:
+            recomendaciones.append("Derivación a bienestar psicológico para estrategias de manejo de estrés")
+
+        if promedio < 12:
+            recomendaciones.append("Implementar plan de reforzamiento académico con tutorías especializadas")
+
+    # 🟡 RIESGO MODERADO - Monitoreo activo
+    elif 'moderado' in riesgo_lower:
+        recomendaciones.append("Programar sesión de seguimiento académico en las próximas 2 semanas")
+        recomendaciones.append("Implementar sistema de alertas tempranas para prevenir escalada de riesgo")
+
+    # 🔵 RIESGO LEVE - Seguimiento preventivo
+    elif 'leve' in riesgo_lower:
+        recomendaciones.append("Mantener seguimiento mensual preventivo y reforzar factores protectores")
+
+    # ✅ SIN RIESGO - Refuerzo positivo
+    else:
+        recomendaciones.append("Mantener el excelente desempeño actual con reconocimiento positivo")
+        recomendaciones.append("Invitar a participar como mentor/tutor par para otros estudiantes")
+
+    # RECOMENDACIONES SEGÚN CLÚSTER
+    if 'c1' in cluster_norm:  # Compromiso alto
+        if promedio >= 14:
+            recomendaciones.append("Motivar participación en proyectos de investigación o actividades extracurriculares")
+
+    elif 'c2' in cluster_norm:  # Estrés académico / Carga laboral alta
+        recomendaciones.append("Evaluar redistribución de carga académica o considerar reducción de créditos")
+
+        if carga_norm == 'completa':
+            recomendaciones.append("Negociar con empleador flexibilidad horaria durante semanas de exámenes")
+            recomendaciones.append("Explorar opciones de práctica preprofesional para validar horas laborales")
+
+    elif 'c3' in cluster_norm:  # Riesgo acumulado / Crítico
+        recomendaciones.append("Activar red de soporte integral: académico, emocional y económico")
+        recomendaciones.append("Considerar retiro temporal estratégico si la salud mental está comprometida")
+
+    # FACTORES ESPECÍFICOS ADICIONALES
+
+    # Asistencia irregular o baja
+    if asistencia_norm in ['nula', 'irregular']:
+        recomendaciones.append("Identificar barreras de asistencia (transporte, salud, económicas) y buscar soluciones")
+        recomendaciones.append("Implementar sistema de recordatorios y acompañamiento para mejorar asistencia")
+
+    # Pocas horas de estudio
+    if horas_estudio_norm == 'menor_a_1h' or 'menor' in horas_estudio_norm:
+        recomendaciones.append("Desarrollar plan de gestión del tiempo con bloques de estudio de 25-50 minutos")
+        recomendaciones.append("Enseñar técnicas de estudio efectivas: Pomodoro, resúmenes activos, mapas conceptuales")
+
+    # Carga laboral completa
     if carga_norm == 'completa':
-        recomendaciones.append("Explorar ajustes de horario laboral o negociación de turnos")
+        recomendaciones.append("Explorar becas de estudio o programas de apoyo económico para reducir horas laborales")
 
+    # Sin apoyo familiar
+    if apoyo_norm in ['nulo', 'escaso']:
+        recomendaciones.append("Conectar con grupos de apoyo estudiantil y construir red de soporte alternativa")
+        recomendaciones.append("Informar sobre servicios de residencia estudiantil o apoyo habitacional si aplica")
+
+    # Problemas económicos (sin beca + deudor)
+    if beca_norm == 'no_tiene' and deudor_norm in ['retraso_moderado', 'retraso_crítico', 'retraso_critico']:
+        recomendaciones.append("Gestionar evaluación socioeconómica urgente para acceso a becas de emergencia")
+        recomendaciones.append("Informar sobre programas de trabajo universitario o asistencia alimentaria")
+
+    # Estrés elevado
+    if estres_norm in ['alto', 'severo', 'crítico', 'critico']:
+        recomendaciones.append("Promover técnicas de autocuidado: mindfulness, ejercicio regular, pausas activas")
+        recomendaciones.append("Evaluar sobrecarga académica y priorizar cursos esenciales vs. electivos")
+
+    # Si no hay recomendaciones específicas, agregar seguimiento estándar
     if not recomendaciones:
-        recomendaciones.append("Mantener el buen desempeño actual")
-        recomendaciones.append("Continuar con seguimiento regular")
+        recomendaciones.append("Continuar con seguimiento regular según protocolo institucional")
+        recomendaciones.append("Reforzar comunicación abierta y disponibilidad para consultas")
 
     return recomendaciones
 

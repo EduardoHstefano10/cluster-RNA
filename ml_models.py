@@ -268,15 +268,60 @@ class StudentRiskPredictor:
 
 
 # Función auxiliar para entrenar y guardar modelo
-def train_and_save_model():
+def train_and_save_model(save_to_db=True):
     """
     Entrenar el modelo y guardarlo
+    Si save_to_db=True, guarda los resultados en la base de datos
     """
     print("Iniciando entrenamiento del modelo...")
     model = StudentRiskPredictor()
     results = model.train('estudiantes_data.csv')
     model.save_model()
     print("Modelo entrenado y guardado exitosamente!")
+
+    # Guardar en base de datos si está habilitado
+    if save_to_db:
+        try:
+            # Importar aquí para evitar dependencias circulares
+            from database import EntrenamientosDB
+            import pandas as pd
+
+            # Contar estudiantes en el dataset
+            df = pd.read_csv('estudiantes_data.csv')
+            num_estudiantes = len(df)
+
+            # Calcular precisión del modelo (promedio de train y test)
+            precision = (results['train_accuracy'] + results['test_accuracy']) / 2 * 100
+
+            # Preparar datos para guardar
+            entrenamiento_data = {
+                'num_estudiantes': num_estudiantes,
+                'precision': precision,
+                'metricas': {
+                    'train_accuracy': results['train_accuracy'],
+                    'test_accuracy': results['test_accuracy'],
+                    'n_components': int(results['n_components']),
+                    'gap': abs(results['train_accuracy'] - results['test_accuracy'])
+                },
+                'version': 'v2',
+                'observaciones': f'Entrenamiento automático con {num_estudiantes} estudiantes',
+                'ruta_modelo': 'models/'
+            }
+
+            # Guardar en base de datos
+            db = EntrenamientosDB()
+            success = db.guardar_entrenamiento(entrenamiento_data)
+            db.close()
+
+            if success:
+                print(f"✅ Entrenamiento guardado en base de datos (Precisión: {precision:.2f}%)")
+            else:
+                print("⚠️  No se pudo guardar el entrenamiento en la base de datos")
+
+        except Exception as e:
+            print(f"⚠️  Error al guardar en base de datos: {e}")
+            print("   El modelo se entrenó correctamente pero no se guardó en BD")
+
     return model, results
 
 

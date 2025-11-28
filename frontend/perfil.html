@@ -706,23 +706,19 @@
                 <h2 class="card-title">Recomendación del tutor
                     <span class="suggestion-badge">Sugerencia dinámica</span>
                 </h2>
-                <p class="card-subtitle">Sugerencias inteligentes según el cluster C2 y el perfil de riesgo actual</p>
+                <p class="card-subtitle" id="recommendationSubtitle">Sugerencias inteligentes según el perfil de riesgo actual</p>
 
-                <div class="recommendation-card">
-                    <div class="recommendation-text">
-                        Se sugiere un plan de intervención enfocado en regular el estrés académico y ordenar la carga laboral,
-                        aprovechando la buena asistencia y el apoyo familiar como anclas protectoras.
+                <div class="recommendation-card" id="recommendationCard">
+                    <div class="recommendation-text" id="recommendationIntro">
+                        Cargando recomendaciones personalizadas...
                     </div>
 
-                    <ul class="recommendation-list">
-                        <li>Agendar una sesión de orientación académica para priorizar cursos y distribuir la carga de estudio.</li>
-                        <li>Coordinar derivación opcional a bienestar psicológico para trabajar estrategias de manejo de estrés.</li>
-                        <li>Explorar ajustes de horario laboral o negociación de turnos en coordinación con el estudiante.</li>
-                        <li>Involucrar a la familia en un breve espacio de información sobre señales de alarma y canales de apoyo.</li>
+                    <ul class="recommendation-list" id="recommendationList">
+                        <!-- Se llenará dinámicamente con JavaScript -->
                     </ul>
                 </div>
 
-                <p class="card-subtitle">Última actualización hace 2 días · Basado en variables registradas en este ciclo.</p>
+                <p class="card-subtitle">Última actualización en tiempo real · Basado en variables registradas en este ciclo.</p>
 
                 <button class="btn-action-primary">Registrar intervención</button>
                 <button class="btn-action-secondary">Contactar estudiante</button>
@@ -791,6 +787,11 @@
                 if (data.datos_basicos) {
                     updateBasicData(data.datos_basicos);
                 }
+
+                if (data.prediction) {
+                    updateRecommendations(data.prediction);
+                    updateClusterInfo(data.prediction);
+                }
             } catch (error) {
                 console.error('Error al cargar perfil:', error);
             }
@@ -831,6 +832,69 @@
                 document.getElementById('apoyoFamiliar').textContent = datos.apoyo_familiar;
             if (datos.modalidad)
                 document.getElementById('modalidad').textContent = datos.modalidad;
+        }
+
+        // Actualizar información del clúster asignado
+        function updateClusterInfo(prediction) {
+            const clusterName = prediction.cluster_name || 'Sin asignar';
+            const cluster = prediction.cluster || '';
+
+            // Actualizar nombre del clúster
+            const clusterNameElement = document.getElementById('clusterName');
+            if (clusterNameElement) {
+                clusterNameElement.textContent = clusterName;
+            }
+
+            console.log('Clúster actualizado:', clusterName);
+        }
+
+        // Actualizar recomendaciones dinámicas
+        function updateRecommendations(prediction) {
+            if (!prediction.recommendations || prediction.recommendations.length === 0) {
+                return;
+            }
+
+            const cluster = prediction.cluster || '';
+            const clusterName = prediction.cluster_name || '';
+            const riskLabel = prediction.risk_label || '';
+
+            // Actualizar subtítulo con información del clúster
+            const subtitle = document.getElementById('recommendationSubtitle');
+            if (subtitle) {
+                subtitle.textContent = `Sugerencias inteligentes según ${clusterName} y perfil de ${riskLabel.toLowerCase()}`;
+            }
+
+            // Generar texto de introducción según el nivel de riesgo
+            const intro = document.getElementById('recommendationIntro');
+            if (intro) {
+                let introText = '';
+                const riskLower = riskLabel.toLowerCase();
+
+                if (riskLower.includes('crítico')) {
+                    introText = '🚨 ATENCIÓN URGENTE: Se requiere intervención inmediata. El estudiante presenta múltiples factores de riesgo que demandan acción prioritaria.';
+                } else if (riskLower.includes('alto')) {
+                    introText = '⚠️ PRIORIDAD ALTA: Se recomienda intervención temprana para prevenir escalada de riesgo académico.';
+                } else if (riskLower.includes('moderado')) {
+                    introText = 'Se sugiere un plan de intervención enfocado en fortalecer factores protectores y reducir factores de riesgo identificados.';
+                } else if (riskLower.includes('leve')) {
+                    introText = 'El estudiante presenta factores de riesgo menores. Se recomienda seguimiento preventivo regular.';
+                } else {
+                    introText = '✅ El estudiante muestra buen desempeño. Se recomienda mantener factores protectores y reconocer logros.';
+                }
+
+                intro.textContent = introText;
+            }
+
+            // Llenar lista de recomendaciones
+            const list = document.getElementById('recommendationList');
+            if (list) {
+                list.innerHTML = '';
+                prediction.recommendations.forEach(rec => {
+                    const li = document.createElement('li');
+                    li.textContent = rec;
+                    list.appendChild(li);
+                });
+            }
         }
 
         // Actualizar gráfico de riesgo
