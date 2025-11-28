@@ -447,7 +447,7 @@
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-label">Total de estudiantes</div>
-                <div class="stat-value">128</div>
+                <div class="stat-value" id="totalEstudiantesRegistered">128</div>
                 <div class="stat-subtext">Asignados a este tutor</div>
             </div>
 
@@ -485,7 +485,7 @@
             </div>
         </div>
 
-        <!-- Filters -->
+        <!-- Filtros -->
         <div class="filters-card">
             <div class="filter-section">
                 <div>
@@ -509,16 +509,6 @@
                     </div>
                 </div>
 
-                <!-- <div>
-                    <label class="stat-label mb-2">Estado</label>
-                    <div class="filter-group">
-                        <button class="btn-filter active">Todos</button>
-                        <button class="btn-filter">Pendiente</button>
-                        <button class="btn-filter">En tutoría</button>
-                        <button class="btn-filter">En observación</button>
-                    </div>
-                </div> -->
-
                 <div style="flex: 1; min-width: 250px;">
                     <label class="stat-label mb-2">Buscar estudiante</label>
                     <div class="filter-group">
@@ -531,9 +521,6 @@
                 </div>
 
                 <button class="btn-clear">Limpiar filtros</button>
-                <!-- <button class="btn-export" id="btnComparacion" style="margin-left: 8px; background: #3b82f6; margin-right: 8px;">
-                    <i class="bi bi-eye-fill"></i> Comparación y Mayor Precisión de Modelos
-                </button> -->
                 <button class="btn-export"><i class="bi bi-download"></i> Exportar listado</button>
             </div>
         </div>
@@ -567,6 +554,8 @@
                     </tr>
                 </tbody>
             </table>
+
+        
         </div>
     </div>
 
@@ -649,8 +638,10 @@
             const clusterBtn = clusterGroup.querySelector('.btn-filter.active');
             if (clusterBtn && !clusterBtn.textContent.includes('Todos')) {
                 const clusterText = clusterBtn.textContent.trim();
-                if (clusterText === 'C1') filters.cluster = 0;
-                else if (clusterText === 'C2') filters.cluster = 1;
+                // Mapeo consistente con backend:
+                // backend get_cluster_name: 0 -> C2, 1 -> C1, 2 -> C3
+                if (clusterText === 'C1') filters.cluster = 1;
+                else if (clusterText === 'C2') filters.cluster = 0;
                 else if (clusterText === 'C3') filters.cluster = 2;
             }
 
@@ -868,11 +859,20 @@
                     const stats = await response.json();
                     console.log('✅ Backend conectado. Estadísticas:', stats);
 
-                    // Actualizar estadísticas en la UI
-                    document.querySelector('.stat-card:nth-child(1) .stat-value').textContent = stats.total_estudiantes || '128';
-                    document.querySelector('.stat-card:nth-child(2) .stat-value').textContent = `${stats.precision_modelo || '92.4'}%`;
-                    document.querySelector('.stat-card:nth-child(3) .stat-value').innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> ${stats.estudiantes_alto_riesgo || '9'}`;
-                    document.querySelector('.stat-card:nth-child(4) .stat-value').textContent = stats.seguimiento_activo || '23';
+                    // Actualizar estadísticas en la UI (elementos con ids)
+                    const totalEl = document.getElementById('totalEstudiantesRegistered');
+                    if (totalEl) totalEl.textContent = stats.total_estudiantes != null ? stats.total_estudiantes : '0';
+
+                    // Mantener actualización de otras tarjetas si existen
+                    const precisionEl = document.querySelector('.stat-card:nth-child(2) .stat-value');
+                    if (precisionEl) precisionEl.textContent = `${stats.precision_modelo || '92.4'}%`;
+
+                    const altoRiesgoEl = document.querySelector('.stat-card:nth-child(3) .stat-value');
+                    if (altoRiesgoEl) altoRiesgoEl.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> ${stats.estudiantes_alto_riesgo || '0'}`;
+
+                    const seguimientoEl = document.querySelector('.stat-card:nth-child(4) .stat-value');
+                    if (seguimientoEl) seguimientoEl.textContent = stats.seguimiento_activo || '0';
+
                 } else {
                     console.warn('⚠️ Backend responde con error:', response.status);
                 }
