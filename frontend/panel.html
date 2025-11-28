@@ -641,7 +641,7 @@
                 if (riesgoText.includes('Sin riesgo')) filters.riesgo = 'Sin_riesgo';
                 else if (riesgoText.includes('Leve')) filters.riesgo = 'Riesgo_leve';
                 else if (riesgoText.includes('Moderado')) filters.riesgo = 'Riesgo_moderado';
-                else if (riesgoText.includes('Alto') || riesgoText.includes('Crítico')) filters.riesgo = 'Riesgo_alto';
+                else if (riesgoText.includes('Alto') || riesgoText.includes('Crítico')) filters.riesgo = 'Alto_Critico';
             }
 
             // Obtener filtro de clúster
@@ -652,13 +652,6 @@
                 if (clusterText === 'C1') filters.cluster = 0;
                 else if (clusterText === 'C2') filters.cluster = 1;
                 else if (clusterText === 'C3') filters.cluster = 2;
-            }
-
-            // Obtener filtro de estado
-            const estadoGroup = filterGroups[2];
-            const estadoBtn = estadoGroup.querySelector('.btn-filter.active');
-            if (estadoBtn && !estadoBtn.textContent.includes('Todos')) {
-                filters.estado = estadoBtn.textContent.trim();
             }
 
             // Obtener búsqueda
